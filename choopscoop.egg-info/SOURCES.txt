@@ -1,0 +1,10 @@
+LICENSE.md
+README.md
+pyproject.toml
+tag_patterns.py
+choopscoop.egg-info/PKG-INFO
+choopscoop.egg-info/SOURCES.txt
+choopscoop.egg-info/dependency_links.txt
+choopscoop.egg-info/entry_points.txt
+choopscoop.egg-info/requires.txt
+choopscoop.egg-info/top_level.txt

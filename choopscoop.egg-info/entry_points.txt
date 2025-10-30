@@ -1,0 +1,2 @@
+[console_scripts]
+choopscoop = choopscoop_site_auditor_v2_1:main
