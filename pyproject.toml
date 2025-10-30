@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "choopscoop"
+version = "2.1.0"
+description = "A site auditing and tag detection tool built with Playwright."
+readme = "README_CHOOPSCOOP.md"
+authors = [
+    { name = "Jerusha Gray", email = "jerusha.gray@gmail.com" }
+]
+license = { file = "LICENSE.md" }
+keywords = ["web-audit", "crawler", "tag-detection", "martech", "analytics"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+requires-python = ">=3.9"
+
+dependencies = [
+    "playwright>=1.44",
+    "pyyaml>=6.0",
+    "aiofiles>=23.2",
+    "requests>=2.31",
+]
+
+[project.urls]
+Homepage = "https://github.com/<your-handle>/choopscoop"
+Documentation = "https://github.com/<your-handle>/choopscoop#readme"
+Issues = "https://github.com/<your-handle>/choopscoop/issues"
+
+[project.scripts]
+choopscoop = "choopscoop_site_auditor_v2_1:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-data]
+"*" = ["*.yaml", "*.md"]

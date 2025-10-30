@@ -1,0 +1,91 @@
+# Site Auditor v2.0 - Configuration File
+# Copy and customize this file for your specific needs
+
+# Crawl Settings
+crawl:
+  max_pages: 100              # Maximum number of pages to crawl
+  max_depth: 3                # Maximum depth from start URL
+  rate_limit: 1.0             # Seconds between requests
+  concurrent_pages: 3         # Number of pages to crawl simultaneously (1-10)
+  timeout: 30                 # Page load timeout in seconds
+  
+# Retry Settings
+retry:
+  max_retries: 3              # Number of retries for failed requests
+  retry_delay: 2.0            # Seconds to wait between retries
+  retry_on_status: [500, 502, 503, 504, 429]  # HTTP status codes to retry
+
+# Browser Settings
+browser:
+  headless: true              # Run browser in headless mode
+  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+  viewport:
+    width: 1920
+    height: 1080
+  javascript_enabled: true
+  ignore_https_errors: false  # Set to true to ignore SSL certificate errors
+
+# URL Filtering
+filters:
+  respect_robots: true        # Respect robots.txt
+  exclude_patterns: []        # List of regex patterns to exclude
+  include_patterns: []        # List of regex patterns to include (if empty, include all)
+  skip_extensions:            # File extensions to skip
+    - .pdf
+    - .jpg
+    - .jpeg
+    - .png
+    - .gif
+    - .svg
+    - .css
+    - .js
+    - .zip
+    - .tar
+    - .gz
+    - .xml
+    - .json
+    - .mp4
+    - .mp3
+    - .avi
+    - .mov
+
+# Technology Detection
+technology:
+  use_wappalyzer: true        # Use Wappalyzer CLI if available
+  use_fallback: true          # Use fallback pattern detection
+  wappalyzer_timeout: 30      # Timeout for Wappalyzer in seconds
+
+# Tag Detection
+tags:
+  detect_all: true            # Detect all configured tags
+  custom_patterns: {}         # Add custom tag patterns (same format as TAG_PATTERNS)
+
+# DataLayer Analysis
+datalayer:
+  extract: true               # Extract dataLayer contents
+  parse_events: true          # Parse and categorize GA4 events
+  max_events: 100             # Maximum dataLayer events to capture per page
+
+# Performance Metrics
+performance:
+  capture_metrics: true       # Capture page load metrics
+  capture_screenshots: false  # Capture screenshots (increases storage/time)
+  screenshot_format: "png"    # png or jpeg
+
+# Output Settings
+output:
+  formats: ["json", "csv", "html"]  # Export formats (json, csv, html, all)
+  prefix: "site-audit"        # Output file prefix
+  save_progress: true         # Save progress periodically (enables resume)
+  progress_interval: 10       # Save progress every N pages
+
+# Logging
+logging:
+  level: "INFO"               # DEBUG, INFO, WARNING, ERROR
+  log_file: "site-auditor.log"  # Log file name (null for no file logging)
+  console: true               # Log to console
+
+# Resume Settings
+resume:
+  enabled: true               # Allow resuming interrupted crawls
+  state_file: ".crawl_state.json"  # File to save crawl state
