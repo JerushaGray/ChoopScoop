@@ -1,11 +1,11 @@
-# 🐾 ChoopScoop — Site Auditor & Tag Detection Tool (v2.1)
+#  ChoopScoop — Site Auditor & Tag Detection Tool (v2.1)
 
 **ChoopScoop** is a professional-grade, Playwright-powered web auditing and tag detection tool.  
 Developed by **Jerusha Gray** as part of her **MarTech and Data Strategy portfolio**, under **IdeoPraxis Collective LLC — DBA GetFunnelCaked**.
 
 ---
 
-## 🚀 Overview
+## Overview
 
 ChoopScoop automates the auditing of websites to detect analytics and marketing tags, identify underlying technologies, analyze dataLayer events, and generate structured reports.  
 It’s designed for accuracy, transparency, and performance — ideal for marketing operations professionals, analysts, and engineers who want actionable insights into digital ecosystems.
@@ -14,7 +14,7 @@ Version **2.1 (MVP)** focuses on stability, accuracy, and scalability, setting t
 
 ---
 
-## ✨ Key Features
+##  Key Features
 
 - **Modern Playwright crawler** with asynchronous performance  
 - **Comprehensive tag detection:** GA4, GTM, Facebook, LinkedIn, TikTok, Adobe, Segment, and more  
@@ -27,7 +27,7 @@ Version **2.1 (MVP)** focuses on stability, accuracy, and scalability, setting t
 
 ---
 
-## 🧰 Installation
+##  Installation
 
 ### Option 1 — Install from Source
 ```bash
@@ -46,7 +46,7 @@ pip install .
 
 ---
 
-## ⚙️ Post-Install Setup
+##  Post-Install Setup
 
 After installation, run this once to install Playwright browsers (required for audits):
 
@@ -58,7 +58,7 @@ This step ensures the Chromium browser engine is properly configured.
 
 ---
 
-## 🧠 Usage
+##  Usage
 
 ### Basic Example
 ```bash
@@ -75,7 +75,7 @@ You can also define settings in `config.yaml` for reusable crawl parameters.
 
 ---
 
-## 📊 Outputs
+## Outputs
 
 ChoopScoop automatically generates three export formats:
 
@@ -108,13 +108,13 @@ choopscoop/
 
 ---
 
-## 🧭 Roadmap
+##  Roadmap
 
 ChoopScoop evolves thoughtfully — see [ROADMAP.md](ROADMAP.md) for planned enhancements and version milestones.
 
 ---
 
-## 🧱 Contributing
+## Contributing
 
 This project is maintained as a **personal portfolio artifact**.  
 However, it follows open documentation and structure standards to support long-term maintainability.  
@@ -122,7 +122,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for details on project principles and con
 
 ---
 
-## 🧑‍💻 Author
+##  Author
 
 **Jerusha Gray**  
 Marketing Operations, MarTech & Data Strategy  
