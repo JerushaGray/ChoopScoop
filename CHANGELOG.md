@@ -2,7 +2,26 @@
 ### IdeoPraxis Collective LLC — DBA GetFunnelCaked
 
 This changelog documents key milestones, improvements, and version updates for the ChoopScoop Site Auditor project.
+---
+### 🧩 v2.1.1 — Cross-Platform Compatibility Update
+- **Fixed:** Playwright browser path detection now supports Windows, macOS, and Linux.  
+- **Improved:** Dependency checks no longer produce false “browser not installed” errors on Windows systems.  
+- **Impact:** Ensures smoother first-run setup and accurate environment validation across all platforms.
 
+#### 🛠️ How to Update
+1. Pull the latest version from GitHub:  
+   ```bash
+   git pull origin main
+   ```
+2. Replace your local `choopscoop_site_auditor_v2.1.py` with `choopscoop_site_auditor_v2.1_fixed.py`.  
+3. Reinstall the package in editable mode to refresh dependencies:  
+   ```bash
+   pip install -e .
+   ```
+4. Verify installation by running:  
+   ```bash
+   python choopscoop_site_auditor_v2.1.py https://example.com
+   ```
 ---
 
 ## 📦 v2.1 — MVP Release
