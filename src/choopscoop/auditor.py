@@ -79,8 +79,9 @@ class CrawlState:
 class SiteAuditor:
     """Playwright-powered web crawler with comprehensive tag and technology detection."""
 
-    def __init__(self, config: Dict):
+    def __init__(self, config: Dict, extended_tech_patterns: Optional[Dict] = None):
         self.config = config
+        self._tech_patterns = extended_tech_patterns or TECHNOLOGY_PATTERNS
         self.start_url = config['start_url']
         self.base_domain = urlparse(self.start_url).netloc
 
@@ -346,25 +347,42 @@ class SiteAuditor:
         """Detect technologies from HTML, meta tags, headers, and network requests."""
         technologies = []
 
-        for tech_name, tech_config in TECHNOLOGY_PATTERNS.items():
+        for tech_name, tech_config in self._tech_patterns.items():
             evidence = []
 
             for pattern in tech_config['patterns']:
-                if re.search(pattern, page_content, re.IGNORECASE):
-                    evidence.append(f"html_pattern:{pattern}")
+                # Support both compiled patterns and raw strings
+                if hasattr(pattern, 'search'):
+                    match = pattern.search(page_content)
+                else:
+                    match = re.search(pattern, page_content, re.IGNORECASE)
+                if match:
+                    pat_str = pattern.pattern if hasattr(pattern, 'pattern') else pattern
+                    evidence.append(f"html_pattern:{pat_str}")
                     break
 
             if 'meta' in tech_config:
                 for meta_name, meta_pattern in tech_config['meta']:
                     for meta in meta_tags:
-                        if meta.get('name') == meta_name and re.search(meta_pattern, meta.get('content', '')):
-                            evidence.append(f"meta:{meta_name}")
+                        if meta.get('name') == meta_name:
+                            content = meta.get('content', '')
+                            if hasattr(meta_pattern, 'search'):
+                                matched = meta_pattern.search(content)
+                            else:
+                                matched = re.search(meta_pattern, content)
+                            if matched:
+                                evidence.append(f"meta:{meta_name}")
 
             if 'headers' in tech_config:
                 for header_name, header_pattern in tech_config['headers']:
                     header_val = headers.get(header_name, '')
-                    if header_val and re.search(header_pattern, header_val, re.IGNORECASE):
-                        evidence.append(f"header:{header_name}")
+                    if header_val:
+                        if hasattr(header_pattern, 'search'):
+                            matched = header_pattern.search(header_val)
+                        else:
+                            matched = re.search(header_pattern, header_val, re.IGNORECASE)
+                        if matched:
+                            evidence.append(f"header:{header_name}")
 
             if network_requests and 'urls' in tech_config:
                 for url_pattern in tech_config['urls']:
@@ -931,7 +949,7 @@ class SiteAuditor:
                 h = _extract_host(url_frag)
                 if h:
                     known_hosts.add(h)
-        for tech_config in TECHNOLOGY_PATTERNS.values():
+        for tech_config in self._tech_patterns.values():
             for url_frag in tech_config.get('urls', []):
                 h = _extract_host(url_frag)
                 if h:
@@ -942,7 +960,7 @@ class SiteAuditor:
         for tag_config in TAG_PATTERNS.values():
             for d in tag_config.get('owned_domains', []):
                 owned_domains.add(d)
-        for tech_config in TECHNOLOGY_PATTERNS.values():
+        for tech_config in self._tech_patterns.values():
             for d in tech_config.get('owned_domains', []):
                 owned_domains.add(d)
 

@@ -1,5 +1,47 @@
 # Changelog
 
+## v3.2.0
+
+Extended technology detection via Wappalyzer adapter.  ChoopScoop can now
+detect ~5000 technologies by converting Wappalyzer OSS fingerprints at
+runtime, without bundling any GPL data in the package.
+
+### Added
+
+- **Wappalyzer adapter module** (`wappalyzer_adapter.py`).  Build-time
+  converter that transforms Wappalyzer-format fingerprints (scriptSrc, html,
+  meta, headers) into ChoopScoop's TECHNOLOGY_PATTERNS schema.  Strips
+  `\;version:\1` and `\;confidence:` suffixes, validates regexes, and
+  normalizes keys to snake_case.
+- **`--fetch-rulesets` CLI flag.**  Downloads Wappalyzer fingerprint data
+  from GitHub to `~/.choopscoop/rulesets/` using stdlib urllib.  Tries
+  multiple mirror URLs (enthec/webappanalyzer, AliasIO/wappalyzer,
+  wappalyzer/wappalyzer) for resilience.  No URL argument required.
+- **`--extended` CLI flag.**  Loads cached Wappalyzer rulesets, converts
+  them, and merges with curated patterns using curated-wins semantics.
+  All patterns are compiled once at load for performance (~4900 patterns
+  in ~0.3s).
+- **One-time pattern compilation** (`compile_patterns`).  Pre-compiles all
+  regex patterns, meta patterns, and header patterns to `re.Pattern` objects.
+  The auditor's detection methods transparently handle both compiled and
+  string patterns.
+- **Category mapping.**  Maps Wappalyzer's ~100 category IDs to
+  ChoopScoop's 16 category strings via explicit ID map with name-based
+  fallback.  Unmapped categories default to 'Other'.
+- 36 new tests covering suffix stripping, key normalization, category
+  mapping, entry conversion, merge semantics, pattern compilation, and
+  end-to-end auditor integration with compiled patterns.  Total: 240.
+
+### Changed
+
+- `SiteAuditor.__init__` accepts optional `extended_tech_patterns` parameter
+  for injecting pre-merged/compiled pattern dicts.
+- `detect_technologies` and `_classify_network_requests` use
+  `self._tech_patterns` instead of the global `TECHNOLOGY_PATTERNS`,
+  enabling extended detection without modifying the curated pattern library.
+- `url` CLI positional argument is now optional when `--fetch-rulesets` is
+  used.
+
 ## v3.1.0
 
 Evidence-based detection overhaul. Network requests are now the primary evidence

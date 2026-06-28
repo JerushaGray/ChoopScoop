@@ -11,6 +11,10 @@ from urllib.parse import urlparse
 
 from choopscoop import __version__
 from choopscoop.auditor import SiteAuditor
+from choopscoop.wappalyzer_adapter import (
+    fetch_rulesets, load_and_convert, merge_patterns, compile_patterns,
+    RULESETS_DIR,
+)
 
 try:
     import yaml
@@ -147,7 +151,8 @@ Examples:
         """
     )
 
-    parser.add_argument('url', help='Starting URL to crawl')
+    parser.add_argument('url', nargs='?', default=None,
+                        help='Starting URL to crawl')
     parser.add_argument('--config', help='Path to config file (YAML)')
     parser.add_argument('--max-pages', type=int, help='Maximum pages to crawl')
     parser.add_argument('--max-depth', type=int, help='Maximum crawl depth')
@@ -162,10 +167,29 @@ Examples:
                         help='URL patterns to include (regex)')
     parser.add_argument('--no-resume', action='store_true',
                         help='Disable resume capability')
+    parser.add_argument('--fetch-rulesets', action='store_true',
+                        help='Download Wappalyzer fingerprints to local cache and exit')
+    parser.add_argument('--extended', action='store_true',
+                        help='Enable extended technology detection using cached Wappalyzer rulesets')
     parser.add_argument('--version', action='version',
                         version=f'%(prog)s {__version__}')
 
     args = parser.parse_args()
+
+    # Handle --fetch-rulesets: download and exit
+    if args.fetch_rulesets:
+        print(f"ChoopScoop v{__version__} - fetching Wappalyzer rulesets...\n")
+        try:
+            dest = fetch_rulesets()
+            print(f"\nRulesets cached at {dest}")
+            print("Use --extended to enable extended detection on your next crawl.")
+        except Exception as e:
+            print(f"Error fetching rulesets: {e}", file=sys.stderr)
+            sys.exit(1)
+        return
+
+    if not args.url:
+        parser.error("the following arguments are required: url")
 
     print(f"ChoopScoop v{__version__} - checking dependencies...\n")
     if not check_dependencies():
@@ -175,7 +199,24 @@ Examples:
 
     config = load_config(args.config, vars(args))
 
-    auditor = SiteAuditor(config)
+    # Load extended patterns if requested
+    extended_patterns = None
+    if args.extended:
+        if not RULESETS_DIR.exists():
+            print(
+                "No cached rulesets found. Run --fetch-rulesets first.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        print("Loading extended technology detection (Wappalyzer rulesets)...")
+        wappalyzer_patterns = load_and_convert()
+        from choopscoop.patterns import TECHNOLOGY_PATTERNS
+        extended_patterns = merge_patterns(TECHNOLOGY_PATTERNS, wappalyzer_patterns)
+        extended_patterns = compile_patterns(extended_patterns)
+        print(f"  {len(extended_patterns)} technology patterns loaded "
+              f"({len(extended_patterns) - len(TECHNOLOGY_PATTERNS)} from Wappalyzer)\n")
+
+    auditor = SiteAuditor(config, extended_tech_patterns=extended_patterns)
 
     try:
         await auditor.crawl()

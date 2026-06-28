@@ -4,15 +4,20 @@ import pytest
 from choopscoop.cli import _default_config
 
 
-@pytest.fixture
-def default_config():
-    """A default config dict with a start_url set."""
+def make_config():
+    """Return a test-ready config dict (non-fixture, for direct import)."""
     config = _default_config()
     config['start_url'] = 'https://example.com'
     config['resume']['enabled'] = False
     config['logging']['console'] = False
     config['logging']['log_file'] = None
     return config
+
+
+@pytest.fixture
+def default_config():
+    """A default config dict with a start_url set."""
+    return make_config()
 
 
 @pytest.fixture

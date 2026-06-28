@@ -11,11 +11,11 @@ A Playwright-powered site auditor that crawls websites to detect marketing tags,
 
 | Category | Count | Examples |
 |----------|-------|---------|
-| Marketing/analytics tags | 73 | GTM, GA4, Facebook Pixel, LinkedIn, TikTok, Adobe, HubSpot, Segment |
+| Marketing/analytics tags | 77 | GTM, GA4, Facebook Pixel, LinkedIn, TikTok, Adobe, HubSpot, Segment |
 | Technologies | 50 | WordPress, Shopify, React, Next.js, Cloudflare, Stripe, Vercel |
 | GA4 event types | 25 | purchase, add_to_cart, page_view, generate_lead, form_submit |
 
-All detection uses built-in pattern matching against HTML, script sources, meta tags, and response headers. No external services or API keys required.
+All detection uses built-in pattern matching against HTML, script sources, meta tags, response headers, and captured network requests. No external services or API keys required.
 
 ## Quick start
 
@@ -70,8 +70,8 @@ Every audit produces up to three export files:
 URL --> Playwright (Chromium, headless)
          |
          |--> Extract script tags, meta tags, response headers
-         |--> Match against 73 tag patterns (regex + URL signatures)
-         |--> Match against 50 technology patterns (HTML, meta, headers)
+         |--> Match against 77 tag patterns (regex + URL signatures + network hosts)
+         |--> Match against 50+ technology patterns (HTML, meta, headers, network)
          |--> Parse dataLayer for GA4/ecommerce events
          |--> Capture performance metrics (load time, FCP, DOM timings)
          |--> Extract internal links --> queue for next depth level
@@ -89,11 +89,12 @@ URL --> Playwright (Chromium, headless)
 
 ```
 src/choopscoop/
-    __init__.py       Package metadata and version
-    __main__.py       python -m choopscoop entry point
-    auditor.py        SiteAuditor class: crawling, detection, export
-    cli.py            Argument parsing, config loading, entry point
-    patterns.py       Tag patterns, technology patterns, GA4 event map
+    __init__.py              Package metadata and version
+    __main__.py              python -m choopscoop entry point
+    auditor.py               SiteAuditor class: crawling, detection, export
+    cli.py                   Argument parsing, config loading, entry point
+    patterns.py              Tag patterns, technology patterns, GA4 event map
+    wappalyzer_adapter.py    Wappalyzer fingerprint conversion and caching
 config.yaml           Default configuration template
 tests/                Test suite (pytest)
 docs/
@@ -126,12 +127,26 @@ resume:
 
 All settings can also be overridden via CLI flags. See `choopscoop --help`.
 
+## Extended technology detection
+
+By default ChoopScoop ships 50 curated technology patterns. For broader coverage (~5000 technologies), you can opt in to fingerprints from the [Wappalyzer](https://github.com/AliasIO/wappalyzer) open-source project:
+
+```bash
+# One-time: download fingerprints to ~/.choopscoop/rulesets/
+choopscoop --fetch-rulesets
+
+# Use them on your next crawl
+choopscoop https://example.com --extended
+```
+
+This is opt-in because the Wappalyzer fingerprint data is [GPL-3.0](https://www.gnu.org/licenses/gpl-3.0.en.html) licensed. ChoopScoop (MIT) never bundles or redistributes that data -- `--fetch-rulesets` downloads it to your local machine only. The 50 curated patterns always take precedence when both sources define the same technology.
+
 ## Comparison
 
 | Feature | ChoopScoop | Screaming Frog | Lighthouse | python-seo-analyzer |
 |---------|-----------|----------------|------------|---------------------|
-| Marketing tag detection (73 tools) | Yes | No | No | No |
-| Technology fingerprinting (50 techs) | Yes | Limited | No | No |
+| Marketing tag detection (77 tools) | Yes | No | No | No |
+| Technology fingerprinting (50 curated, ~5000 extended) | Yes | Limited | No | No |
 | DataLayer/GA4 event parsing | Yes | No | No | No |
 | JavaScript-rendered pages | Yes (Playwright) | Yes | Yes | No |
 | Performance metrics | Yes | Yes | Yes | No |

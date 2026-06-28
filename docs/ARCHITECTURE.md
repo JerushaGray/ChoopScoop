@@ -23,6 +23,11 @@ SiteAuditor (auditor.py)
   |     |-- TAG_PATTERNS (77 marketing/analytics tags, with evidence tracking)
   |     |-- TECHNOLOGY_PATTERNS (50+ platform fingerprints)
   |     `-- GA4_EVENTS (25 dataLayer event types)
+  |-- Wappalyzer adapter (wappalyzer_adapter.py, optional --extended)
+  |     |-- fetch_rulesets: download fingerprints to ~/.choopscoop/rulesets/
+  |     |-- load_and_convert: JSON -> ChoopScoop schema conversion
+  |     |-- merge_patterns: curated-wins merge with extended data
+  |     `-- compile_patterns: one-time regex compilation at load
   |-- Link extraction and crawl queue
   `-- Export (JSON / CSV / HTML, matched + unidentified host split)
 ```
@@ -188,18 +193,58 @@ Many tag detection tools use plain HTTP requests. ChoopScoop uses a real browser
 The cost is higher resource usage and slower crawl speed. For the typical use case
 (auditing a single site, 50-500 pages), this is an acceptable trade-off.
 
+### Extended detection via Wappalyzer adapter (v3.2)
+
+The curated TECHNOLOGY_PATTERNS library covers ~50 technologies -- the ones most
+relevant to MarTech auditing.  For broader coverage (~5000 technologies), ChoopScoop
+can optionally load fingerprints from the Wappalyzer open-source project.
+
+**Why not bundle them?**  Wappalyzer fingerprint data is GPL-3.0; ChoopScoop is MIT.
+Bundling the data would create a license compatibility issue.  Instead, the user
+downloads the data themselves (`--fetch-rulesets`) to a local cache
+(`~/.choopscoop/rulesets/`), and the adapter converts the format at runtime.  The
+package never distributes GPL content.
+
+**Format conversion.**  Wappalyzer entries use a different schema than ChoopScoop:
+
+| Wappalyzer field | ChoopScoop equivalent |
+|---|---|
+| `scriptSrc` (list of regex) | `patterns` (list of regex) |
+| `html` (body-level regex) | `patterns` (disabled by default -- too noisy) |
+| `meta` (dict of `{name: pattern}`) | `meta` (list of `(name, pattern)` tuples) |
+| `headers` (dict of `{name: pattern}`) | `headers` (list of `(name, pattern)` tuples) |
+| `cats` (list of category IDs) | `category` (single string) |
+
+Wappalyzer patterns carry suffixes like `\;version:\1` and `\;confidence:50` that
+are stripped during conversion.  Invalid regexes are silently dropped.
+
+**Curated-wins merge.**  When `--extended` is used, the 50 curated patterns are
+merged with the converted Wappalyzer entries.  For any key that exists in both dicts,
+the curated entry is kept.  This preserves the false-positive hardening work (Magento,
+WooCommerce, Bootstrap, Tailwind) and evidence/confidence tuning from v3.1.
+
+**One-time compilation.**  With ~5000 patterns, per-page `re.compile` would add
+significant overhead.  All patterns (regex, meta, headers) are compiled to
+`re.Pattern` objects once at load.  The detection engine transparently handles both
+compiled and string patterns, so curated-only mode (default) is unaffected.
+
+**Mirror resilience.**  The Wappalyzer repo has moved between GitHub organizations
+multiple times.  `fetch_rulesets` probes three known mirrors in order and uses the
+first one that responds.
+
 ## Project Layout
 
 ```
 src/choopscoop/
-  __init__.py        # Package version
-  __main__.py        # python -m choopscoop entry point
-  auditor.py         # SiteAuditor class, crawl logic, export
-  cli.py             # Argument parsing, config loading, dependency checks
-  patterns.py        # TAG_PATTERNS, TECHNOLOGY_PATTERNS, GA4_EVENTS
+  __init__.py              # Package version
+  __main__.py              # python -m choopscoop entry point
+  auditor.py               # SiteAuditor class, crawl logic, export
+  cli.py                   # Argument parsing, config loading, dependency checks
+  patterns.py              # TAG_PATTERNS, TECHNOLOGY_PATTERNS, GA4_EVENTS
+  wappalyzer_adapter.py    # Wappalyzer fingerprint conversion and caching
 
 tests/
-  conftest.py        # Shared fixtures (config, auditor instance)
+  conftest.py              # Shared fixtures (config, auditor instance)
   test_tag_detection.py
   test_technology_detection.py
   test_datalayer.py
@@ -207,6 +252,7 @@ tests/
   test_config.py
   test_export.py
   test_patterns.py
+  test_wappalyzer_adapter.py
 ```
 
 Tests cover all non-Playwright logic (pattern matching, config loading, URL filtering,
