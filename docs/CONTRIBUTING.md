@@ -1,6 +1,6 @@
 # Contributing
 
-ChoopScoop is maintained as a personal portfolio project. Contributions, issues, and feedback are welcome.
+Contributions, issues, and feedback are welcome.
 
 ## Development setup
 
