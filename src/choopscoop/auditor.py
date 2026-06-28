@@ -55,7 +55,7 @@ class CrawlState:
             }
             state_path = Path(self.state_file)
             with open(state_path, 'w') as f:
-                json.dump(state, f, indent=2)
+                json.dump(state, f, indent=2, default=str)
             logging.debug(f"Saved crawl state to {self.state_file}")
         except Exception as e:
             logging.error(f"Could not save state: {e}")
@@ -150,13 +150,16 @@ class SiteAuditor:
     def _load_previous_state(self):
         """Load previous crawl state for resume."""
         if self.state and self.state.state:
-            self.visited_urls = set(self.state.state.get('visited_urls', []))
+            visited = self.state.state.get('visited_urls', [])
+            if not visited:
+                return
+
+            self.visited_urls = set(visited)
             self.to_visit = self.state.state.get('to_visit', [(self.start_url, 0)])
             self.page_data = self.state.state.get('page_data', [])
             self.broken_links = self.state.state.get('broken_links', [])
 
-            if self.visited_urls:
-                logging.info(f"Resuming crawl: {len(self.visited_urls)} pages already visited")
+            logging.info(f"Resuming crawl: {len(self.visited_urls)} pages already visited")
 
     def save_progress(self):
         """Save crawl progress."""
@@ -526,9 +529,15 @@ class SiteAuditor:
         try:
             response = await page.goto(
                 url,
-                wait_until='networkidle',
+                wait_until='domcontentloaded',
                 timeout=self.timeout
             )
+
+            # Allow extra time for JS-injected tags to fire
+            try:
+                await page.wait_for_load_state('networkidle', timeout=5000)
+            except Exception:
+                pass
 
             if not response:
                 await page.close()
@@ -705,7 +714,7 @@ class SiteAuditor:
         }
 
         with open(filename, 'w', encoding='utf-8') as f:
-            json.dump(output, f, indent=2, ensure_ascii=False)
+            json.dump(output, f, indent=2, ensure_ascii=False, default=str)
 
         print(f"Exported JSON to {filename}")
 

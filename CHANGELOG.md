@@ -1,5 +1,14 @@
 # Changelog
 
+## v3.0.1
+
+- Added 11 ecommerce/DTC tag patterns: Shopify Web Pixels, Attentive, Yotpo, Nosto, Smile.io, Rebuy, Privy, Gorgias, AfterShip, Recharge, Bold Commerce
+- Total tag detection expanded from 62 to 73 patterns
+- Fixed resume bug where fresh crawls would not start due to empty state being loaded
+- Fixed page load timeout by switching from networkidle to domcontentloaded with best-effort networkidle fallback
+- Fixed JSON export crash caused by non-serializable datetime objects in crawl data
+- Fixed .gitignore encoding corruption that prevented crawl output from being ignored
+
 ## v3.0.0
 
 **Breaking:** Full restructure from single-file script to proper Python package.
