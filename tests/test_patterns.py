@@ -5,7 +5,7 @@ from choopscoop.patterns import TAG_PATTERNS, GA4_EVENTS, TECHNOLOGY_PATTERNS
 
 class TestPatternIntegrity:
     def test_tag_pattern_count(self):
-        assert len(TAG_PATTERNS) == 73
+        assert len(TAG_PATTERNS) == 77
 
     def test_technology_pattern_count(self):
         assert len(TECHNOLOGY_PATTERNS) == 50
@@ -33,6 +33,7 @@ class TestPatternIntegrity:
             'Customer Data Platform', 'Heatmaps', 'Session Recording',
             'A/B Testing', 'Consent Management', 'E-commerce', 'Retargeting',
             'Marketing Automation', 'Customer Support', 'CRM',
+            'Programmatic-Advertising',
         }
         for name, config in TAG_PATTERNS.items():
             assert config['category'] in known, f"{name} has unknown category: {config['category']}"

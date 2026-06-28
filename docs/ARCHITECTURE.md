@@ -13,13 +13,18 @@ CLI (cli.py)
   v
 SiteAuditor (auditor.py)
   |-- Playwright browser (headless Chromium)
-  |-- Pattern matching engine
-  |     |-- TAG_PATTERNS (73 marketing/analytics tags)
-  |     |-- TECHNOLOGY_PATTERNS (50 platform fingerprints)
-  |     |-- GA4_EVENTS (25 dataLayer event types)
-  |     `-- Response header rules
+  |-- Network capture (all third-party requests, with POST data)
+  |-- Detection engine
+  |     |-- detect_tags: HTML patterns + URL signatures + network host matching
+  |     |-- detect_technologies: HTML + meta + headers + network corroboration
+  |     |-- _parse_datalayer: standard events + gtag() argument decoding
+  |     `-- decode_ga4_collect_requests: /g/collect URL + POST body parsing
+  |-- Pattern library (patterns.py)
+  |     |-- TAG_PATTERNS (77 marketing/analytics tags, with evidence tracking)
+  |     |-- TECHNOLOGY_PATTERNS (50+ platform fingerprints)
+  |     `-- GA4_EVENTS (25 dataLayer event types)
   |-- Link extraction and crawl queue
-  `-- Export (JSON / CSV / HTML)
+  `-- Export (JSON / CSV / HTML, matched + unidentified host split)
 ```
 
 ## Key Design Decisions
@@ -61,21 +66,29 @@ This captures the vast majority of tags because marketing scripts typically fire
 1-2 seconds of DOM ready. The few that load later (lazy-loaded chat widgets, deferred
 pixels) are still caught if they appear in the static HTML source.
 
-### Dual detection strategy: patterns + URL signatures
+### Three-layer detection: patterns + URL signatures + network requests
 
-Each tag entry supports two detection methods:
+Each tag entry supports three detection methods:
 
 - **Regex patterns** match against the full page HTML (e.g., `GTM-[A-Z0-9]{4,}` for
   Google Tag Manager container IDs).
 - **URL signatures** match against the page source as substring checks (e.g.,
   `js.hs-scripts.com` for HubSpot).
+- **Network request host matching** (added in v3.1) compares tag URL signatures against
+  the parsed host of every captured third-party request using `urllib.parse`.
 
-Using both reduces false negatives. Some tags are only identifiable by their script URL
-(no distinctive runtime pattern), while others are injected inline without a recognizable
-URL. The URL check is a simple `in` operation, not a regex, which keeps it fast across
-73 patterns times hundreds of pages.
+The network layer was added because some tags (LinkedIn Insight Tag, Google Ads/DoubleClick)
+fire hundreds of network requests but have no inline HTML signature. Prior to v3.1, these
+were invisible because detection only ran against the rendered DOM. Network requests are
+now the primary evidence source for tags that operate via pixel/beacon requests.
 
-### Technology detection via response headers
+The `log_request` handler captures all third-party requests (any host that differs from
+the crawled page's domain), not a curated allowlist. This ensures unknown vendors are
+never silently dropped. At export time, requests are split into matched (known pattern)
+and unidentified third-party hosts with counts, keeping file size manageable while
+surfacing unknown vendors for competitive recon.
+
+### Technology detection via response headers and network corroboration
 
 CMS and platform detection originally relied only on HTML patterns and meta tags. This
 misses server-side technologies that leave no trace in the DOM. v3.0 added header-based
@@ -89,6 +102,24 @@ detection:
 Headers are checked with the same regex engine as HTML patterns, using a separate
 `headers` field in `TECHNOLOGY_PATTERNS` entries.
 
+v3.1 added network request corroboration: technology patterns with a `urls` field are
+also matched against captured third-party request hosts. This provides independent
+confirmation and enables detection of technologies that load assets from known CDNs
+(e.g., `cdn.shopify.com`) even when the HTML pattern does not match.
+
+### False-positive hardening (v3.1)
+
+Several technology patterns were tightened after field testing showed false positives:
+
+- **Magento**: bare `Magento` (case-insensitive) matched any text mention. Replaced with
+  specific patterns (`Magento_Ui`, `mage/cookies`, `/skin/frontend/.*Magento`).
+- **WooCommerce**: bare `woocommerce` matched blog posts about WooCommerce. Replaced with
+  `wc-cart-fragments`, `class="woocommerce`, `wp-content/plugins/woocommerce`.
+- **Bootstrap/Tailwind**: CSS class-name patterns (`container`, `row`, `col-md`, `flex`,
+  `text-sm`) matched nearly every site. Removed entirely, kept only versioned filename
+  patterns. Tailwind carries a `detection_note` because purged/bundled builds are
+  undetectable from filename alone -- this is a conscious false-negative trade-off.
+
 ### Crawl state and resume
 
 Long crawls (100+ pages) can fail mid-run due to network issues, rate limiting, or
@@ -99,6 +130,50 @@ off instead of re-crawling.
 State files are domain-specific (`crawl_state_example_com.json`) so multiple audits can
 coexist. The `--no-resume` flag forces a fresh start.
 
+### Evidence and confidence model (v3.1)
+
+Every detection (tag or technology) now records what it matched on and a confidence level:
+
+```python
+{
+    'found': True,
+    'ids': ['GTM-ABC123'],
+    'category': 'Tag Management',
+    'evidence': ['html_pattern:GTM-[A-Z0-9]{4,}', 'request_host:www.googletagmanager.com'],
+    'confidence': 'high'
+}
+```
+
+Evidence types: `html_pattern`, `script_url`, `request_host`, `request_url`, `meta`,
+`header`. Confidence is derived from evidence, not assigned separately:
+
+- **high**: network request, response header, meta generator tag
+- **medium**: specific JS API pattern or script src URL in HTML
+- **low**: generic regex (reserved for future use; currently all shipped patterns are
+  medium or higher after the false-positive hardening pass)
+
+The model is for reporting -- it does not gate detections at runtime.
+
+### GA4 event decoding (v3.1)
+
+GA4 events reach the tool through two channels that are now both decoded:
+
+1. **dataLayer parser** (`_parse_datalayer`): handles standard `dataLayer.push` events
+   and gtag() argument objects. A `gtag('event','purchase',{value:99})` call serializes
+   as `{"0":"event","1":"purchase","2":{"value":99}}` -- the parser detects numeric-key
+   objects and routes `event` commands to the events list, while `config`/`consent`/`set`/
+   `js`/`get` go to a separate `gtag_config` summary.
+
+2. **Measurement Protocol decoder** (`decode_ga4_collect_requests`): parses
+   `google-analytics.com/g/collect` request URLs and POST bodies. Extracts `en=` (event
+   name), `tid=` (measurement ID), `ep.*`/`epn.*` (event/numeric params). Deduplicates
+   retransmissions (`_s=1` vs `_s=2`) on a stable key before counting.
+
+Both layers intentionally surface the same events. The dataLayer shows what the page
+intends to send; collect requests show what GA4 actually received after consent filtering.
+They are stored under separate keys (`datalayer` and `ga4_collect_events`) and are not
+collapsed.
+
 ### Why not async HTTP (httpx/aiohttp) instead of Playwright?
 
 Many tag detection tools use plain HTTP requests. ChoopScoop uses a real browser because:
@@ -107,8 +182,8 @@ Many tag detection tools use plain HTTP requests. ChoopScoop uses a real browser
   Segment). A plain HTTP fetch sees none of them.
 - **DataLayer access.** GA4 events are pushed to `window.dataLayer` at runtime. Extracting
   them requires JS execution.
-- **Network request logging.** Playwright can intercept outbound requests to tracking
-  domains, providing evidence of tag firing beyond pattern matching.
+- **Network request logging.** Playwright intercepts all outbound third-party requests,
+  providing the primary evidence source for tag detection beyond pattern matching.
 
 The cost is higher resource usage and slower crawl speed. For the typical use case
 (auditing a single site, 50-500 pages), this is an acceptable trade-off.

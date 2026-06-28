@@ -205,3 +205,122 @@ class TestMiscDetection:
         content = '<div id="___gatsby"></div>'
         auditor.detect_technologies(content, [], {})
         assert auditor.stats['technologies_found']['gatsby'] == 1
+
+
+class TestFalsePositiveHardening:
+    def test_magento_not_detected_from_text_mention(self, auditor):
+        content = '<html><body><p>Compare Magento vs Shopify for your store</p></body></html>'
+        result = auditor.detect_technologies(content, [], {})
+        names = [t['name'] for t in result]
+        assert 'magento' not in names
+
+    def test_magento_detected_from_specific_pattern(self, auditor):
+        content = '<script>require(["mage/cookies"]);</script>'
+        result = auditor.detect_technologies(content, [], {})
+        names = [t['name'] for t in result]
+        assert 'magento' in names
+
+    def test_woocommerce_not_detected_from_text_mention(self, auditor):
+        content = '<html><body><p>WooCommerce is a popular e-commerce platform</p></body></html>'
+        result = auditor.detect_technologies(content, [], {})
+        names = [t['name'] for t in result]
+        assert 'woocommerce' not in names
+
+    def test_woocommerce_detected_from_plugin_path(self, auditor):
+        content = '<link rel="stylesheet" href="/wp-content/plugins/woocommerce/assets/css/style.css">'
+        result = auditor.detect_technologies(content, [], {})
+        names = [t['name'] for t in result]
+        assert 'woocommerce' in names
+
+    def test_woocommerce_detected_from_class(self, auditor):
+        content = '<div class="woocommerce product-list"></div>'
+        result = auditor.detect_technologies(content, [], {})
+        names = [t['name'] for t in result]
+        assert 'woocommerce' in names
+
+    def test_bootstrap_not_detected_from_common_classes(self, auditor):
+        content = '<div class="container row col-md-6"><p>Hello</p></div>'
+        result = auditor.detect_technologies(content, [], {})
+        names = [t['name'] for t in result]
+        assert 'bootstrap' not in names
+
+    def test_bootstrap_detected_from_filename(self, auditor):
+        content = '<script src="/js/bootstrap.5.3.min.js"></script>'
+        result = auditor.detect_technologies(content, [], {})
+        names = [t['name'] for t in result]
+        assert 'bootstrap' in names
+
+    def test_tailwind_not_detected_from_utility_classes(self, auditor):
+        content = '<div class="flex grid text-sm bg-gray-100"><p>Hello</p></div>'
+        result = auditor.detect_technologies(content, [], {})
+        names = [t['name'] for t in result]
+        assert 'tailwindcss' not in names
+
+    def test_tailwind_detected_from_filename(self, auditor):
+        content = '<link href="/css/tailwindcss.min.css" rel="stylesheet">'
+        result = auditor.detect_technologies(content, [], {})
+        names = [t['name'] for t in result]
+        assert 'tailwindcss' in names
+
+
+class TestEvidenceModel:
+    def test_evidence_field_present(self, auditor):
+        content = '<script src="https://cdn.shopify.com/s/files/theme.js"></script>'
+        result = auditor.detect_technologies(content, [], {})
+        shopify = [t for t in result if t['name'] == 'shopify'][0]
+        assert 'evidence' in shopify
+        assert isinstance(shopify['evidence'], list)
+        assert len(shopify['evidence']) > 0
+
+    def test_confidence_high_from_network_request(self, auditor):
+        requests = [
+            {'url': 'https://cdn.shopify.com/s/files/theme.js',
+             'method': 'GET', 'type': 'script', 'post_data': None},
+        ]
+        result = auditor.detect_technologies('', [], {}, network_requests=requests)
+        shopify = [t for t in result if t['name'] == 'shopify']
+        assert len(shopify) == 1
+        assert shopify[0]['confidence'] == 'high'
+
+    def test_confidence_high_from_header(self, auditor):
+        result = auditor.detect_technologies('', [], {'server': 'cloudflare'})
+        cf = [t for t in result if t['name'] == 'cloudflare'][0]
+        assert cf['confidence'] == 'high'
+        assert any('header:' in e for e in cf['evidence'])
+
+    def test_confidence_medium_from_js_pattern(self, auditor):
+        content = '<script>React.createElement("div")</script>'
+        result = auditor.detect_technologies(content, [], {})
+        react = [t for t in result if t['name'] == 'react'][0]
+        assert react['confidence'] == 'medium'
+        assert any('html_pattern:' in e for e in react['evidence'])
+
+    def test_confidence_from_meta_tag(self, auditor):
+        meta = [{'name': 'generator', 'content': 'WordPress 6.4'}]
+        result = auditor.detect_technologies('', meta, {})
+        wp = [t for t in result if t['name'] == 'wordpress'][0]
+        assert wp['confidence'] == 'high'
+        assert any('meta:' in e for e in wp['evidence'])
+
+
+class TestNetworkCorroboration:
+    def test_technology_detected_from_network_request(self, auditor):
+        requests = [
+            {'url': 'https://cdn.shopify.com/s/files/1/theme.js',
+             'method': 'GET', 'type': 'script', 'post_data': None},
+        ]
+        result = auditor.detect_technologies('', [], {}, network_requests=requests)
+        names = [t['name'] for t in result]
+        assert 'shopify' in names
+
+    def test_technology_gains_higher_confidence_with_network(self, auditor):
+        content = '<script src="https://cdn.shopify.com/s/files/theme.js"></script>'
+        requests = [
+            {'url': 'https://cdn.shopify.com/s/files/theme.js',
+             'method': 'GET', 'type': 'script', 'post_data': None},
+        ]
+        result = auditor.detect_technologies(content, [], {}, network_requests=requests)
+        shopify = [t for t in result if t['name'] == 'shopify'][0]
+        assert shopify['confidence'] == 'high'
+        assert any('html_pattern:' in e for e in shopify['evidence'])
+        assert any('request_host:' in e for e in shopify['evidence'])

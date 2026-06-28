@@ -2,16 +2,23 @@
 Tag Detection Patterns - Centralized configuration for all tracking tools
 """
 
+# Evidence confidence levels
+CONFIDENCE_HIGH = 'high'      # network request, response header, meta generator, specific asset path
+CONFIDENCE_MEDIUM = 'medium'  # specific JS API pattern, script src URL in HTML
+CONFIDENCE_LOW = 'low'        # generic/loose regex match
+
 TAG_PATTERNS = {
     # Google Products
     'google_tag_manager': {
         'patterns': [r'GTM-[A-Z0-9]{4,}'],
         'urls': ['googletagmanager.com/gtm.js', 'googletagmanager.com/ns.html'],
+        'owned_domains': ['googletagmanager.com', 'google-analytics.com', 'googleapis.com'],
         'category': 'Tag Management'
     },
     'google_analytics_4': {
         'patterns': [r'G-[A-Z0-9]{10,}'],
         'urls': ['googletagmanager.com/gtag/js', 'google-analytics.com/g/collect'],
+        'owned_domains': ['google-analytics.com', 'googletagmanager.com', 'analytics.google.com'],
         'category': 'Analytics'
     },
     'universal_analytics': {
@@ -21,7 +28,8 @@ TAG_PATTERNS = {
     },
     'google_ads': {
         'patterns': [r'AW-\d+'],
-        'urls': ['googleadservices.com/pagead/conversion'],
+        'urls': ['googleadservices.com/pagead/conversion', 'cm.g.doubleclick.net', 'pagead2.googlesyndication.com'],
+        'owned_domains': ['googleadservices.com', 'doubleclick.net', 'googlesyndication.com', 'googleads.g.doubleclick.net'],
         'category': 'Advertising'
     },
     'google_optimize': {
@@ -33,7 +41,8 @@ TAG_PATTERNS = {
     # Meta/Facebook Products
     'facebook_pixel': {
         'patterns': [r'fbq\([\'"]init[\'"]\s*,\s*[\'"](\d+)[\'"]'],
-        'urls': ['connect.facebook.net/en_US/fbevents.js'],
+        'urls': ['connect.facebook.net/en_US/fbevents.js', 'facebook.com/tr'],
+        'owned_domains': ['facebook.com', 'facebook.net', 'fbcdn.net'],
         'category': 'Advertising'
     },
     'facebook_capi': {
@@ -45,7 +54,8 @@ TAG_PATTERNS = {
     # LinkedIn
     'linkedin_insight': {
         'patterns': [r'_linkedin_partner_id\s*=\s*[\'"](\d+)[\'"]'],
-        'urls': ['snap.licdn.com/li.lms-analytics', 'px.ads.linkedin.com'],
+        'urls': ['snap.licdn.com/li.lms-analytics', 'px.ads.linkedin.com', 'platform.linkedin.com'],
+        'owned_domains': ['linkedin.com', 'licdn.com'],
         'category': 'Advertising'
     },
     
@@ -53,6 +63,7 @@ TAG_PATTERNS = {
     'tiktok_pixel': {
         'patterns': [r'ttq\.load\([\'"]([A-Z0-9]+)[\'"]', r'tiktok_pixel_code[\'"]?\s*:\s*[\'"]([A-Z0-9]+)[\'"]'],
         'urls': ['analytics.tiktok.com/i18n/pixel/events.js'],
+        'owned_domains': ['tiktok.com', 'tiktokcdn.com'],
         'category': 'Advertising'
     },
     
@@ -60,6 +71,7 @@ TAG_PATTERNS = {
     'twitter_pixel': {
         'patterns': [r'twq\([\'"]init[\'"]'],
         'urls': ['static.ads-twitter.com/uwt.js'],
+        'owned_domains': ['twitter.com', 'ads-twitter.com', 'twimg.com'],
         'category': 'Advertising'
     },
     
@@ -88,6 +100,7 @@ TAG_PATTERNS = {
     'adobe_analytics': {
         'patterns': [r's_account\s*=', r'var s=s_gi\('],
         'urls': ['omtrdc.net', 'adobedtm.com'],
+        'owned_domains': ['omtrdc.net', 'adobedtm.com', 'demdex.net'],
         'category': 'Analytics'
     },
     'adobe_launch': {
@@ -110,6 +123,7 @@ TAG_PATTERNS = {
     'segment': {
         'patterns': [r'analytics\.load\([\'"]([a-zA-Z0-9]+)[\'"]'],
         'urls': ['cdn.segment.com/analytics.js'],
+        'owned_domains': ['segment.com', 'segment.io'],
         'category': 'Customer Data Platform'
     },
     
@@ -149,6 +163,7 @@ TAG_PATTERNS = {
     'hotjar': {
         'patterns': [r'hjid:\s*(\d+)', r'hj\([\'"](hjid|identify)[\'"]'],
         'urls': ['static.hotjar.com'],
+        'owned_domains': ['hotjar.com', 'hotjar.io'],
         'category': 'Heatmaps'
     },
     'crazy_egg': {
@@ -174,6 +189,7 @@ TAG_PATTERNS = {
     'clarity': {
         'patterns': [r'clarity\([\'"]set[\'"]'],
         'urls': ['clarity.ms'],
+        'owned_domains': ['clarity.ms'],
         'category': 'Heatmaps'
     },
     
@@ -213,6 +229,7 @@ TAG_PATTERNS = {
     'quantcast': {
         'patterns': [r'quantserve\.com', r'__qca'],
         'urls': ['quantcast.mgr.consensu.org'],
+        'owned_domains': ['quantserve.com', 'quantcount.com'],
         'category': 'Consent Management'
     },
     
@@ -287,6 +304,7 @@ TAG_PATTERNS = {
     'hubspot': {
         'patterns': [r'_hsq\.push', r'portalId:\s*(\d+)'],
         'urls': ['js.hs-scripts.com', 'js.hubspot.com'],
+        'owned_domains': ['hubspot.com', 'hs-scripts.com', 'hs-analytics.net', 'hsforms.com', 'hsforms.net', 'hscollectedforms.net', 'hsadspixel.net', 'hs-banner.com', 'hsappstatic.net', 'hubspotusercontent-na1.net', 'usemessages.com', 'hscollectedforms.net', 'hubspotvideo.com'],
         'category': 'Marketing Automation'
     },
     'marketo': {
@@ -379,6 +397,7 @@ TAG_PATTERNS = {
     'hubspot_conversations': {
         'patterns': [r'HubSpotConversations'],
         'urls': ['js.usemessages.com'],
+        'owned_domains': ['hubspot.com', 'usemessages.com'],
         'category': 'Customer Support'
     },
 
@@ -393,17 +412,45 @@ TAG_PATTERNS = {
     'microsoft_clarity': {
         'patterns': [r'clarity\([\'"]start[\'"]'],
         'urls': ['www.clarity.ms'],
+        'owned_domains': ['clarity.ms'],
         'category': 'Analytics'
     },
     'bing_ads': {
         'patterns': [r'UET_TAG_ID'],
         'urls': ['bat.bing.com'],
+        'owned_domains': ['bing.com', 'msn.com'],
         'category': 'Advertising'
     },
     'yandex_metrica': {
         'patterns': [r'ym\(\d+'],
         'urls': ['mc.yandex.ru/metrika'],
         'category': 'Analytics'
+    },
+
+    # Programmatic Advertising
+    'liveramp': {
+        'patterns': [r'idsync\.rlcdn\.com'],
+        'urls': ['idsync.rlcdn.com'],
+        'owned_domains': ['rlcdn.com', 'liveramp.com', 'pippio.com'],
+        'category': 'Programmatic-Advertising'
+    },
+    'index_exchange': {
+        'patterns': [r'casalemedia\.com'],
+        'urls': ['dsum-sec.casalemedia.com'],
+        'owned_domains': ['casalemedia.com', 'indexexchange.com'],
+        'category': 'Programmatic-Advertising'
+    },
+    'pubmatic': {
+        'patterns': [r'pubmatic\.com'],
+        'urls': ['image2.pubmatic.com'],
+        'owned_domains': ['pubmatic.com'],
+        'category': 'Programmatic-Advertising'
+    },
+    'magnite': {
+        'patterns': [r'rubiconproject\.com'],
+        'urls': ['pixel.rubiconproject.com'],
+        'owned_domains': ['rubiconproject.com', 'magnite.com'],
+        'category': 'Programmatic-Advertising'
     },
 }
 
@@ -483,22 +530,25 @@ TECHNOLOGY_PATTERNS = {
     'hubspot_cms': {
         'patterns': [r'hs-sites\.com', r'cdn2\.hubspot\.net/hub/'],
         'meta': [('generator', r'HubSpot')],
+        'owned_domains': ['hubspot.com', 'hubspot.net', 'hs-sites.com', 'hsappstatic.net', 'hubspotusercontent-na1.net'],
         'category': 'CMS'
     },
 
     # --- E-commerce ---
     'shopify': {
         'patterns': [r'cdn\.shopify\.com', r'Shopify\.theme', r'sdks\.shopifycdn\.com'],
+        'urls': ['cdn.shopify.com', 'sdks.shopifycdn.com'],
+        'owned_domains': ['shopify.com', 'shopifycdn.com'],
         'meta': [('shopify-checkout-api-token', r'.')],
         'category': 'E-commerce'
     },
     'woocommerce': {
-        'patterns': [r'woocommerce', r'wc-cart', r'class=["\']woocommerce'],
+        'patterns': [r'wc-cart-fragments', r'class=["\']woocommerce', r'wp-content/plugins/woocommerce'],
         'meta': [('generator', r'WooCommerce')],
         'category': 'E-commerce'
     },
     'magento': {
-        'patterns': [r'Magento', r'/static/version', r'mage/cookies'],
+        'patterns': [r'Magento_Ui', r'mage/cookies', r'/skin/frontend/.*Magento'],
         'meta': [],
         'category': 'E-commerce'
     },
@@ -584,12 +634,13 @@ TECHNOLOGY_PATTERNS = {
 
     # --- CSS / UI Frameworks ---
     'bootstrap': {
-        'patterns': [r'bootstrap[\.-][\d\.]+\.(?:min\.)?(?:css|js)', r'class=["\'](?:[^"\']*\s)?(?:container|row|col-(?:sm|md|lg|xl))[\s"\'"]'],
+        'patterns': [r'bootstrap[\.-][\d\.]+\.(?:min\.)?(?:css|js)'],
         'meta': [],
         'category': 'CSS Framework'
     },
     'tailwindcss': {
-        'patterns': [r'tailwindcss', r'tailwind\.min\.css', r'class=["\'](?:[^"\']*\s)?(?:flex|grid|text-(?:sm|lg|xl)|bg-(?:gray|blue|red))[\s"\'"]'],
+        'patterns': [r'tailwindcss', r'tailwind\.min\.css'],
+        'detection_note': 'unreliable: purged/bundled Tailwind is not detectable from filename alone',
         'meta': [],
         'category': 'CSS Framework'
     },
@@ -601,6 +652,7 @@ TECHNOLOGY_PATTERNS = {
     'font_awesome': {
         'patterns': [r'font-awesome', r'fontawesome', r'fa-[a-z]+-[a-z]+'],
         'meta': [],
+        'owned_domains': ['fontawesome.com'],
         'category': 'UI Library'
     },
 
@@ -608,6 +660,7 @@ TECHNOLOGY_PATTERNS = {
     'cloudflare': {
         'patterns': [r'cdnjs\.cloudflare\.com', r'cloudflareinsights\.com'],
         'headers': [('server', r'cloudflare')],
+        'owned_domains': ['cloudflare.com', 'cloudflareinsights.com'],
         'category': 'CDN'
     },
     'akamai': {
@@ -693,6 +746,7 @@ TECHNOLOGY_PATTERNS = {
     'google_fonts': {
         'patterns': [r'fonts\.googleapis\.com', r'fonts\.gstatic\.com'],
         'meta': [],
+        'owned_domains': ['googleapis.com', 'gstatic.com'],
         'category': 'Font Service'
     },
     'typekit': {
@@ -705,6 +759,7 @@ TECHNOLOGY_PATTERNS = {
     'recaptcha': {
         'patterns': [r'google\.com/recaptcha', r'grecaptcha', r'recaptcha/api'],
         'meta': [],
+        'owned_domains': ['google.com', 'gstatic.com'],
         'category': 'Security'
     },
     'hcaptcha': {

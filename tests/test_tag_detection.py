@@ -340,3 +340,68 @@ class TestNoFalsePositives:
         content = '<script src="https://static.hotjar.com/c/hotjar.js"></script>'
         result = auditor.detect_tags(content, 'https://example.com')
         assert result['hotjar']['category'] == 'Heatmaps'
+
+    def test_evidence_field_present(self, auditor):
+        content = "fbq('init', '999');"
+        result = auditor.detect_tags(content, 'https://example.com')
+        assert 'evidence' in result['facebook_pixel']
+        assert isinstance(result['facebook_pixel']['evidence'], list)
+        assert len(result['facebook_pixel']['evidence']) > 0
+
+    def test_confidence_field_present(self, auditor):
+        content = "fbq('init', '999');"
+        result = auditor.detect_tags(content, 'https://example.com')
+        assert 'confidence' in result['facebook_pixel']
+        assert result['facebook_pixel']['confidence'] in ('high', 'medium', 'low')
+
+
+class TestNetworkRequestDetection:
+    def test_linkedin_detected_from_request_only(self, auditor):
+        """LinkedIn Insight Tag detected from network request with no inline HTML."""
+        requests = [
+            {'url': 'https://px.ads.linkedin.com/collect/?pid=12345&fmt=gif',
+             'method': 'GET', 'type': 'image', 'post_data': None},
+        ]
+        result = auditor.detect_tags('', 'https://example.com', network_requests=requests)
+        assert 'linkedin_insight' in result
+        assert result['linkedin_insight']['found'] is True
+        assert any('request_host' in e for e in result['linkedin_insight']['evidence'])
+        assert result['linkedin_insight']['confidence'] == 'high'
+
+    def test_google_ads_detected_from_doubleclick_request(self, auditor):
+        requests = [
+            {'url': 'https://cm.g.doubleclick.net/pixel?google_nid=abc',
+             'method': 'GET', 'type': 'image', 'post_data': None},
+        ]
+        result = auditor.detect_tags('', 'https://example.com', network_requests=requests)
+        assert 'google_ads' in result
+        assert result['google_ads']['found'] is True
+        assert result['google_ads']['confidence'] == 'high'
+
+    def test_hubspot_detected_from_request_and_html(self, auditor):
+        """Both HTML and network evidence recorded when both present."""
+        content = "_hsq.push(['identify', {}]);"
+        requests = [
+            {'url': 'https://js.hs-scripts.com/12345.js',
+             'method': 'GET', 'type': 'script', 'post_data': None},
+        ]
+        result = auditor.detect_tags(content, 'https://example.com', network_requests=requests)
+        assert 'hubspot' in result
+        evidence = result['hubspot']['evidence']
+        assert any('html_pattern' in e for e in evidence)
+        assert any('request_host' in e or 'request_url' in e for e in evidence)
+
+    def test_no_detection_without_matching_request(self, auditor):
+        """Unrelated requests do not cause false detections."""
+        requests = [
+            {'url': 'https://cdn.example.com/style.css',
+             'method': 'GET', 'type': 'stylesheet', 'post_data': None},
+        ]
+        result = auditor.detect_tags('', 'https://example.com', network_requests=requests)
+        assert result == {}
+
+    def test_existing_html_detection_still_works_with_empty_requests(self, auditor):
+        content = "fbq('init', '1234567890');"
+        result = auditor.detect_tags(content, 'https://example.com', network_requests=[])
+        assert 'facebook_pixel' in result
+        assert '1234567890' in result['facebook_pixel']['ids']

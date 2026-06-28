@@ -163,3 +163,71 @@ class TestHtmlExport:
             assert 'Tags Detected' in html
         finally:
             os.unlink(path)
+
+
+class TestNetworkRequestClassification:
+    def test_owned_domain_excluded_from_unidentified(self, auditor):
+        """Hosts on a vendor's owned_domains list are not unidentified."""
+        auditor.page_data = [
+            {'url': 'https://example.com', 'depth': 0, 'status': 200,
+             'metadata': {}, 'tags': {}, 'datalayer': {},
+             'technologies': [], 'performance': {},
+             'network_requests': [
+                 {'url': 'https://secure.quantserve.com/pixel/abc.gif',
+                  'method': 'GET', 'type': 'image', 'post_data': None},
+                 {'url': 'https://rules.quantcount.com/rules.js',
+                  'method': 'GET', 'type': 'script', 'post_data': None},
+                 {'url': 'https://js.hs-analytics.net/analytics.js',
+                  'method': 'GET', 'type': 'script', 'post_data': None},
+                 {'url': 'https://track.hubspot.com/__ptq.gif',
+                  'method': 'GET', 'type': 'image', 'post_data': None},
+             ],
+             'internal_links_found': 0, 'screenshot': None,
+             'crawled_at': '2025-01-01T00:00:00'}
+        ]
+        matched, unidentified = auditor._classify_network_requests()
+        assert len(matched) == 4
+        assert len(unidentified) == 0
+
+    def test_unknown_vendor_remains_in_unidentified(self, auditor):
+        """Hosts matching no owned_domains entry stay in unidentified."""
+        auditor.page_data = [
+            {'url': 'https://example.com', 'depth': 0, 'status': 200,
+             'metadata': {}, 'tags': {}, 'datalayer': {},
+             'technologies': [], 'performance': {},
+             'network_requests': [
+                 {'url': 'https://tracking.unknown-vendor.com/pixel.gif',
+                  'method': 'GET', 'type': 'image', 'post_data': None},
+                 {'url': 'https://sync.mystery-adtech.net/id?abc=1',
+                  'method': 'GET', 'type': 'image', 'post_data': None},
+             ],
+             'internal_links_found': 0, 'screenshot': None,
+             'crawled_at': '2025-01-01T00:00:00'}
+        ]
+        matched, unidentified = auditor._classify_network_requests()
+        assert len(matched) == 0
+        assert 'tracking.unknown-vendor.com' in unidentified
+        assert 'sync.mystery-adtech.net' in unidentified
+
+    def test_mixed_known_and_unknown_hosts(self, auditor):
+        """Known vendor hosts are matched, unknown hosts are unidentified."""
+        auditor.page_data = [
+            {'url': 'https://example.com', 'depth': 0, 'status': 200,
+             'metadata': {}, 'tags': {}, 'datalayer': {},
+             'technologies': [], 'performance': {},
+             'network_requests': [
+                 {'url': 'https://px.ads.linkedin.com/collect?pid=123',
+                  'method': 'GET', 'type': 'image', 'post_data': None},
+                 {'url': 'https://snap.licdn.com/li.lms-analytics/insight.min.js',
+                  'method': 'GET', 'type': 'script', 'post_data': None},
+                 {'url': 'https://unknown-adtech.example.net/pixel.gif',
+                  'method': 'GET', 'type': 'image', 'post_data': None},
+             ],
+             'internal_links_found': 0, 'screenshot': None,
+             'crawled_at': '2025-01-01T00:00:00'}
+        ]
+        matched, unidentified = auditor._classify_network_requests()
+        assert len(matched) == 2
+        assert 'unknown-adtech.example.net' in unidentified
+        assert 'px.ads.linkedin.com' not in unidentified
+        assert 'snap.licdn.com' not in unidentified

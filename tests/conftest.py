@@ -20,3 +20,28 @@ def auditor(default_config):
     """A SiteAuditor instance configured for testing (no Playwright needed)."""
     from choopscoop.auditor import SiteAuditor
     return SiteAuditor(default_config)
+
+
+@pytest.fixture
+def sample_network_requests():
+    """Synthetic network requests mimicking a HubSpot CMS site with
+    LinkedIn/GA4/DoubleClick traffic."""
+    return [
+        {'url': 'https://px.ads.linkedin.com/collect/?pid=12345&fmt=gif',
+         'method': 'GET', 'type': 'image', 'post_data': None},
+        {'url': 'https://platform.linkedin.com/in.js',
+         'method': 'GET', 'type': 'script', 'post_data': None},
+        {'url': 'https://cm.g.doubleclick.net/pixel?google_nid=abc',
+         'method': 'GET', 'type': 'image', 'post_data': None},
+        {'url': 'https://www.google-analytics.com/g/collect?v=2&tid=G-ABC123&en=page_view&dl=https://example.com/',
+         'method': 'GET', 'type': 'ping', 'post_data': None},
+        {'url': 'https://www.google-analytics.com/g/collect?v=2&tid=G-ABC123&en=scroll&ep.percent_scrolled=90',
+         'method': 'GET', 'type': 'ping', 'post_data': None},
+        {'url': 'https://www.google-analytics.com/g/collect',
+         'method': 'POST', 'type': 'ping',
+         'post_data': 'v=2&tid=G-ABC123&en=conversion_event_submit_lead_form&ep.form_id=abc'},
+        {'url': 'https://js.hs-scripts.com/12345.js',
+         'method': 'GET', 'type': 'script', 'post_data': None},
+        {'url': 'https://unknown-vendor.example.com/pixel.gif',
+         'method': 'GET', 'type': 'image', 'post_data': None},
+    ]

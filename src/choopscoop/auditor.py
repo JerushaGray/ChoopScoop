@@ -7,7 +7,7 @@ import re
 import logging
 import sys
 from pathlib import Path
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, parse_qs, unquote_plus
 from datetime import datetime
 from collections import defaultdict
 from typing import Set, Dict, List, Optional, Tuple
@@ -17,7 +17,22 @@ from playwright.async_api import (
     TimeoutError as PlaywrightTimeout,
 )
 
-from choopscoop.patterns import TAG_PATTERNS, GA4_EVENTS, TECHNOLOGY_PATTERNS
+from choopscoop.patterns import (
+    TAG_PATTERNS, GA4_EVENTS, TECHNOLOGY_PATTERNS,
+    CONFIDENCE_HIGH, CONFIDENCE_MEDIUM, CONFIDENCE_LOW,
+)
+
+
+def _extract_host(url_fragment: str) -> str:
+    """Extract the host from a URL or URL fragment.
+
+    Handles full URLs (https://example.com/path) and bare fragments
+    (example.com/path) that appear in TAG_PATTERNS/TECHNOLOGY_PATTERNS urls lists.
+    """
+    if '://' in url_fragment:
+        return urlparse(url_fragment).netloc
+    # Bare fragment like 'px.ads.linkedin.com/collect' -- take before first '/'
+    return url_fragment.split('/')[0]
 
 
 class CrawlState:
@@ -274,68 +289,120 @@ class SiteAuditor:
             logging.error(f"Error extracting links from {current_url}: {e}")
             return [], []
 
-    def detect_tags(self, page_content: str, page_url: str) -> Dict:
-        """Detect all tracking tags using comprehensive pattern matching."""
+    def detect_tags(self, page_content: str, page_url: str,
+                    network_requests: Optional[List[Dict]] = None) -> Dict:
+        """Detect tracking tags from HTML content and network requests."""
         detected_tags = {}
 
         for tag_name, tag_config in TAG_PATTERNS.items():
             matches = []
-            found = False
+            evidence = []
 
             for pattern in tag_config['patterns']:
                 found_matches = re.findall(pattern, page_content)
                 if found_matches:
                     matches.extend(found_matches)
-                    found = True
+                    evidence.append(f"html_pattern:{pattern}")
 
             for url_pattern in tag_config['urls']:
                 if url_pattern in page_content:
-                    found = True
+                    evidence.append(f"script_url:{url_pattern}")
 
-            if found or matches:
+            if network_requests:
+                for url_pattern in tag_config['urls']:
+                    pattern_host = _extract_host(url_pattern)
+                    for req in network_requests:
+                        req_host = urlparse(req['url']).netloc
+                        if pattern_host and pattern_host in req_host:
+                            evidence.append(f"request_host:{req_host}")
+                        elif url_pattern in req['url']:
+                            evidence.append(f"request_url:{url_pattern}")
+
+            if evidence or matches:
+                evidence = list(dict.fromkeys(evidence))  # dedupe, preserve order
+                has_network = any(e.startswith('request_') for e in evidence)
+                has_script = any(e.startswith('script_url:') for e in evidence)
+                if has_network:
+                    confidence = CONFIDENCE_HIGH
+                elif has_script:
+                    confidence = CONFIDENCE_MEDIUM
+                else:
+                    confidence = CONFIDENCE_MEDIUM
+
                 detected_tags[tag_name] = {
                     'found': True,
                     'ids': list(set(matches)) if matches else [],
-                    'category': tag_config['category']
+                    'category': tag_config['category'],
+                    'evidence': evidence,
+                    'confidence': confidence,
                 }
                 self.stats['tags_found'][tag_name] += 1
 
         return detected_tags
 
-    def detect_technologies(self, page_content: str, meta_tags: List, headers: Dict) -> List[Dict]:
-        """Detect technologies using built-in pattern matching."""
+    def detect_technologies(self, page_content: str, meta_tags: List,
+                            headers: Dict,
+                            network_requests: Optional[List[Dict]] = None) -> List[Dict]:
+        """Detect technologies from HTML, meta tags, headers, and network requests."""
         technologies = []
 
         for tech_name, tech_config in TECHNOLOGY_PATTERNS.items():
-            found = False
+            evidence = []
 
             for pattern in tech_config['patterns']:
                 if re.search(pattern, page_content, re.IGNORECASE):
-                    found = True
+                    evidence.append(f"html_pattern:{pattern}")
                     break
 
-            if not found and 'meta' in tech_config:
+            if 'meta' in tech_config:
                 for meta_name, meta_pattern in tech_config['meta']:
                     for meta in meta_tags:
                         if meta.get('name') == meta_name and re.search(meta_pattern, meta.get('content', '')):
-                            found = True
+                            evidence.append(f"meta:{meta_name}")
 
-            if not found and 'headers' in tech_config:
+            if 'headers' in tech_config:
                 for header_name, header_pattern in tech_config['headers']:
                     header_val = headers.get(header_name, '')
                     if header_val and re.search(header_pattern, header_val, re.IGNORECASE):
-                        found = True
+                        evidence.append(f"header:{header_name}")
 
-            if found:
-                technologies.append({
+            if network_requests and 'urls' in tech_config:
+                for url_pattern in tech_config['urls']:
+                    pattern_host = _extract_host(url_pattern)
+                    for req in network_requests:
+                        req_host = urlparse(req['url']).netloc
+                        if pattern_host and pattern_host in req_host:
+                            evidence.append(f"request_host:{req_host}")
+                            break
+                    else:
+                        continue
+                    break
+
+            if evidence:
+                evidence = list(dict.fromkeys(evidence))
+                has_network = any(e.startswith('request_host:') for e in evidence)
+                has_header = any(e.startswith('header:') for e in evidence)
+                has_meta = any(e.startswith('meta:') for e in evidence)
+                if has_network or has_header or has_meta:
+                    confidence = CONFIDENCE_HIGH
+                else:
+                    confidence = CONFIDENCE_MEDIUM
+
+                tech_entry = {
                     'name': tech_name,
                     'category': tech_config['category'],
-                })
+                    'evidence': evidence,
+                    'confidence': confidence,
+                }
+                if 'detection_note' in tech_config:
+                    tech_entry['detection_note'] = tech_config['detection_note']
+                technologies.append(tech_entry)
                 self.stats['technologies_found'][tech_name] += 1
 
         return technologies
 
-    async def _detect_tags_from_page(self, page: Page) -> Dict:
+    async def _detect_tags_from_page(self, page: Page,
+                                    network_requests: Optional[List[Dict]] = None) -> Dict:
         """Extract script content from a page and detect tags."""
         try:
             scripts = await page.eval_on_selector_all(
@@ -344,45 +411,188 @@ class SiteAuditor:
             )
 
             page_content = ' '.join(scripts)
-            return self.detect_tags(page_content, page.url)
+            return self.detect_tags(page_content, page.url, network_requests)
 
         except Exception as e:
             logging.error(f"Error detecting tags: {e}")
             return {}
 
+    @staticmethod
+    def _is_gtag_arguments_object(item: Dict) -> bool:
+        """Check if a dataLayer item is a gtag() arguments object.
+
+        gtag() calls serialize into dataLayer as their raw arguments object,
+        e.g. gtag('config','G-XXX') becomes {"0":"config","1":"G-XXX"}.
+        GTM may inject extra keys like gtm.uniqueEventId alongside the numeric
+        positional args, so we gate on the presence of key "0" rather than
+        requiring all keys to be numeric.
+        """
+        if 'event' in item:
+            return False
+        return '0' in item
+
     def _parse_datalayer(self, datalayer: List[Dict]) -> Dict:
-        """Parse and analyze dataLayer events."""
+        """Parse and analyze dataLayer events, including gtag() argument objects."""
         parsed = {
             'total_events': len(datalayer),
             'events': [],
             'ga4_events': defaultdict(int),
             'ecommerce_events': [],
-            'custom_events': []
+            'custom_events': [],
+            'gtag_config': [],
         }
 
+        _GTAG_CONFIG_COMMANDS = {'js', 'config', 'set', 'consent', 'get'}
+
         for item in datalayer:
-            if isinstance(item, dict):
-                event_name = item.get('event', 'unknown')
+            if not isinstance(item, dict):
+                continue
 
-                event_info = {
-                    'event': event_name,
-                    'data': item
-                }
-
-                if event_name in GA4_EVENTS:
-                    parsed['ga4_events'][GA4_EVENTS[event_name]] += 1
-                    event_info['type'] = 'ga4'
-                    event_info['description'] = GA4_EVENTS[event_name]
-                elif 'ecommerce' in item:
-                    parsed['ecommerce_events'].append(event_info)
-                    event_info['type'] = 'ecommerce'
+            # Handle gtag() arguments objects (keys are all numeric strings)
+            if self._is_gtag_arguments_object(item):
+                command = item.get('0', '')
+                if command == 'event':
+                    event_name = item.get('1', 'unknown')
+                    params = item.get('2', {})
+                    if not isinstance(params, dict):
+                        params = {}
+                    event_info = {
+                        'event': event_name,
+                        'data': {'event': event_name, **params},
+                        'source': 'gtag_arguments',
+                    }
+                    if event_name in GA4_EVENTS:
+                        parsed['ga4_events'][GA4_EVENTS[event_name]] += 1
+                        event_info['type'] = 'ga4'
+                        event_info['description'] = GA4_EVENTS[event_name]
+                    else:
+                        parsed['custom_events'].append(event_name)
+                        event_info['type'] = 'custom'
+                    parsed['events'].append(event_info)
+                elif command in _GTAG_CONFIG_COMMANDS:
+                    parsed['gtag_config'].append({
+                        'command': command,
+                        'target': item.get('1', ''),
+                        'params': item.get('2', {}),
+                    })
                 else:
-                    parsed['custom_events'].append(event_name)
-                    event_info['type'] = 'custom'
+                    # Unknown gtag command -- treat as custom event
+                    parsed['custom_events'].append(f"gtag:{command}")
+                    parsed['events'].append({
+                        'event': f"gtag:{command}",
+                        'data': item,
+                        'type': 'custom',
+                    })
+                continue
 
-                parsed['events'].append(event_info)
+            # Standard dataLayer.push with an "event" key
+            event_name = item.get('event', 'unknown')
+
+            event_info = {
+                'event': event_name,
+                'data': item
+            }
+
+            if event_name in GA4_EVENTS:
+                parsed['ga4_events'][GA4_EVENTS[event_name]] += 1
+                event_info['type'] = 'ga4'
+                event_info['description'] = GA4_EVENTS[event_name]
+            elif 'ecommerce' in item:
+                parsed['ecommerce_events'].append(event_info)
+                event_info['type'] = 'ecommerce'
+            else:
+                parsed['custom_events'].append(event_name)
+                event_info['type'] = 'custom'
+
+            parsed['events'].append(event_info)
 
         return parsed
+
+    def decode_ga4_collect_requests(self, network_requests: List[Dict]) -> Dict:
+        """Decode GA4 Measurement Protocol /g/collect requests.
+
+        Extracts event names, measurement IDs, and event params from
+        google-analytics.com/g/collect request URLs and POST bodies.
+        Deduplicates retransmissions (_s=1 vs _s=2).
+        """
+        result = {
+            'measurement_ids': [],
+            'events': defaultdict(int),
+            'event_details': [],
+            'raw_request_count': 0,
+        }
+
+        seen_keys = set()
+        measurement_ids = set()
+
+        for req in network_requests:
+            url = req.get('url', '')
+            if 'g/collect' not in url:
+                continue
+            parsed_url = urlparse(url)
+            host = parsed_url.netloc
+            if 'google-analytics.com' not in host and 'analytics.google.com' not in host:
+                continue
+
+            result['raw_request_count'] += 1
+
+            # Parse params from query string
+            params = parse_qs(parsed_url.query, keep_blank_values=True)
+
+            # Also parse POST body if present
+            post_data = req.get('post_data')
+            if post_data and isinstance(post_data, str):
+                try:
+                    body_params = parse_qs(post_data, keep_blank_values=True)
+                    for k, v in body_params.items():
+                        if k not in params:
+                            params[k] = v
+                except Exception:
+                    pass
+
+            event_name = params.get('en', [''])[0]
+            tid = params.get('tid', [''])[0]
+            dl = params.get('dl', [''])[0]
+
+            if not event_name:
+                continue
+
+            if tid:
+                measurement_ids.add(tid)
+
+            # Deduplicate retransmissions using stable key
+            dedup_key = (event_name, tid, dl)
+            if dedup_key in seen_keys:
+                continue
+            seen_keys.add(dedup_key)
+
+            result['events'][event_name] += 1
+
+            # Extract event params (ep.* keys)
+            event_params = {}
+            for k, v in params.items():
+                if k.startswith('ep.'):
+                    event_params[k[3:]] = v[0] if len(v) == 1 else v
+                elif k.startswith('epn.'):
+                    try:
+                        event_params[k[4:]] = float(v[0])
+                    except (ValueError, IndexError):
+                        event_params[k[4:]] = v[0] if v else ''
+
+            detail = {
+                'name': event_name,
+                'params': event_params,
+                'source': 'collect_request',
+            }
+            if event_name in GA4_EVENTS:
+                detail['description'] = GA4_EVENTS[event_name]
+            if tid:
+                detail['measurement_id'] = tid
+            result['event_details'].append(detail)
+
+        result['measurement_ids'] = sorted(measurement_ids)
+        result['events'] = dict(result['events'])
+        return result
 
     async def _extract_datalayer(self, page: Page) -> Dict:
         """Extract and parse dataLayer."""
@@ -507,20 +717,26 @@ class SiteAuditor:
         )
 
         network_logs = []
+        page_domain = urlparse(url).netloc
 
         async def log_request(request):
-            tracking_domains = [
-                'google-analytics.com', 'googletagmanager.com', 'facebook.com/tr',
-                'analytics.tiktok.com', 'linkedin.com', 'ads-twitter.com',
-                'hotjar.com', 'doubleclick.net', 'analytics.google.com',
-                'omtrdc.net', 'demdex.net', 'tags.tiqcdn.com', 'cdn.segment.com'
-            ]
-
-            if any(domain in request.url for domain in tracking_domains):
+            try:
+                req_host = urlparse(request.url).netloc
+            except Exception:
+                return
+            # Capture all third-party requests (not same-origin)
+            if req_host and req_host != page_domain:
+                post_data = None
+                if request.method == 'POST':
+                    try:
+                        post_data = request.post_data
+                    except Exception:
+                        pass
                 network_logs.append({
                     'url': request.url,
                     'method': request.method,
                     'type': request.resource_type,
+                    'post_data': post_data,
                     'timestamp': datetime.now().isoformat()
                 })
 
@@ -558,13 +774,15 @@ class SiteAuditor:
             await asyncio.sleep(self.rate_limit)
 
             metadata = await self._get_page_metadata(page)
-            tags = await self._detect_tags_from_page(page)
+            tags = await self._detect_tags_from_page(page, network_logs)
             links, page_broken_links = await self._extract_links(page, url)
             self.broken_links.extend(page_broken_links)
 
             datalayer = {}
             if self.config['datalayer']['extract']:
                 datalayer = await self._extract_datalayer(page)
+
+            ga4_collect_events = self.decode_ga4_collect_requests(network_logs)
 
             performance = {}
             if self.config['performance']['capture_metrics']:
@@ -585,7 +803,8 @@ class SiteAuditor:
             technologies = self.detect_technologies(
                 html_content,
                 metadata.get('meta_tags', []),
-                resp_headers
+                resp_headers,
+                network_logs
             )
 
             page_info = {
@@ -595,6 +814,7 @@ class SiteAuditor:
                 'metadata': metadata,
                 'tags': tags,
                 'datalayer': datalayer,
+                'ga4_collect_events': ga4_collect_events,
                 'technologies': technologies,
                 'performance': performance,
                 'network_requests': network_logs,
@@ -694,8 +914,67 @@ class SiteAuditor:
         print(f"Unique tags: {len(self.stats['tags_found'])}")
         print(f"Technologies: {len(self.stats['technologies_found'])}")
 
+    def _classify_network_requests(self) -> Tuple[List[Dict], Dict[str, int]]:
+        """Split network requests into matched (known pattern) and unidentified hosts.
+
+        A host is "known" if it matches a URL fragment from any pattern entry OR
+        if its registrable domain appears in any vendor's owned_domains list.
+        This prevents subdomains of known vendors (e.g. secure.quantserve.com for
+        Quantcast) from polluting the unidentified bucket.
+
+        Returns (matched_requests, unidentified_hosts_counts).
+        """
+        # Collect URL-fragment hosts for substring matching
+        known_hosts = set()
+        for tag_config in TAG_PATTERNS.values():
+            for url_frag in tag_config.get('urls', []):
+                h = _extract_host(url_frag)
+                if h:
+                    known_hosts.add(h)
+        for tech_config in TECHNOLOGY_PATTERNS.values():
+            for url_frag in tech_config.get('urls', []):
+                h = _extract_host(url_frag)
+                if h:
+                    known_hosts.add(h)
+
+        # Collect owned domains for registrable-domain attribution
+        owned_domains = set()
+        for tag_config in TAG_PATTERNS.values():
+            for d in tag_config.get('owned_domains', []):
+                owned_domains.add(d)
+        for tech_config in TECHNOLOGY_PATTERNS.values():
+            for d in tech_config.get('owned_domains', []):
+                owned_domains.add(d)
+
+        matched = []
+        unidentified_counts: Dict[str, int] = defaultdict(int)
+
+        for page in self.page_data:
+            for req in page.get('network_requests', []):
+                req_host = urlparse(req['url']).netloc
+                # Check URL-fragment match
+                if any(kh in req_host for kh in known_hosts):
+                    matched.append(req)
+                # Check owned-domain match (host ends with a known domain)
+                elif any(req_host == od or req_host.endswith('.' + od)
+                         for od in owned_domains):
+                    matched.append(req)
+                else:
+                    unidentified_counts[req_host] += 1
+
+        return matched, dict(sorted(unidentified_counts.items(),
+                                    key=lambda x: x[1], reverse=True))
+
     def export_json(self, filename: str):
         """Export comprehensive JSON with all data."""
+        matched_requests, unidentified_hosts = self._classify_network_requests()
+
+        # Strip raw network_requests from page data to control file size
+        pages_export = []
+        for page in self.page_data:
+            p = {k: v for k, v in page.items() if k != 'network_requests'}
+            pages_export.append(p)
+
         output = {
             'crawl_info': {
                 'start_url': self.start_url,
@@ -710,7 +989,9 @@ class SiteAuditor:
             },
             'sitemap': [p['url'] for p in self.page_data],
             'broken_links': self.broken_links,
-            'pages': self.page_data
+            'matched_requests': matched_requests,
+            'unidentified_third_party_hosts': unidentified_hosts,
+            'pages': pages_export
         }
 
         with open(filename, 'w', encoding='utf-8') as f:
