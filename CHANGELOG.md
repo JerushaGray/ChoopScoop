@@ -1,69 +1,31 @@
-# 🐾 ChoopScoop Changelog
-### IdeoPraxis Collective LLC — DBA GetFunnelCaked
+# Changelog
 
-This changelog documents key milestones, improvements, and version updates for the ChoopScoop Site Auditor project.
----
-### 🧩 v2.1.1 — Cross-Platform Compatibility Update
-- **Fixed:** Playwright browser path detection now supports Windows, macOS, and Linux.  
-- **Improved:** Dependency checks no longer produce false “browser not installed” errors on Windows systems.  
-- **Impact:** Ensures smoother first-run setup and accurate environment validation across all platforms.
+## v3.0.0
 
-#### 🛠️ How to Update
-1. Pull the latest version from GitHub:  
-   ```bash
-   git pull origin main
-   ```
-2. Replace your local `choopscoop_site_auditor_v2.1.py` with `choopscoop_site_auditor_v2.1_fixed.py`.  
-3. Reinstall the package in editable mode to refresh dependencies:  
-   ```bash
-   pip install -e .
-   ```
-4. Verify installation by running:  
-   ```bash
-   python choopscoop_site_auditor_v2.1.py https://example.com
-   ```
----
+**Breaking:** Full restructure from single-file script to proper Python package.
 
-## 📦 v2.1 — MVP Release
-**Release Date:** October 2025
+- Reorganized into `src/choopscoop/` package layout (auditor, cli, patterns modules)
+- Removed Wappalyzer subprocess dependency; all detection is now built-in
+- Expanded technology detection from 8 to 50 patterns (CMS, frameworks, CDN, hosting, payment, monitoring)
+- Added response header analysis for server/CDN/platform fingerprinting
+- Cleaned up exception hierarchy and removed unused dependencies (aiofiles, requests)
+- Updated pyproject.toml with proper src layout, console_scripts, and pytest config
+- Stripped internal project management docs; streamlined for public consumption
 
-### 🚀 Features
-- Core Playwright-powered crawler for JS-rendered sites
-- Tag detection for GA4, GTM, Facebook, LinkedIn, TikTok, Adobe, Segment
-- DataLayer event extraction and GA4 structure validation
+## v2.1.1
+
+- Fixed cross-platform Playwright browser path detection (Windows/macOS/Linux)
+- Dependency checks no longer produce false errors on Windows
+
+## v2.1.0
+
+Initial public release.
+
+- Playwright-powered async crawler with concurrent page processing
+- 48 marketing/analytics tag detection patterns
+- DataLayer extraction and GA4 event parsing
 - Performance metrics (load time, FCP, DOM timings)
-- Resume functionality for interrupted crawls
-- JSON, CSV, and HTML export options
-- Configuration via `config.yaml`
-- Cross-platform support
-
-### 🛠 Improvements
-- Optimized async concurrency to reduce memory usage
-- Added fallback for missing meta tags and script integrity checks
-- Enhanced URL deduplication logic
-
-### 🐞 Fixes
-- Fixed encoding bug in HTML export
-- Addressed YAML parse edge cases on Windows paths
-- Improved error handling for failed page navigation
-
----
-
-## 🧩 Upcoming — v2.2
-**Status:** In planning
-
-### 🎯 Planned Enhancements
-- Streamlined configuration UX with auto-detection
-- Modular tag definition imports (YAML/JSON)
-- Filtering for tag categories and event types
-- Optional screenshot management
-- Documentation refinements for public/portfolio release
-
----
-
-## 🧭 Notes
-All version history is aligned with documented milestones in [ROADMAP.md](ROADMAP.md) and [PATCH-NOTES-v2.1.md](docs/PATCH-NOTES-v2.1.md).
-
----
-
-© 2025 IdeoPraxis Collective LLC — DBA GetFunnelCaked
+- Resume capability for interrupted crawls
+- JSON, CSV, and HTML export
+- YAML configuration support
+- Cross-platform support (Windows, macOS, Linux)

@@ -1,42 +1,35 @@
-# Contributing & Maintenance Notes
+# Contributing
 
-ChoopScoop is developed primarily as a **personal portfolio project** by Jerusha Gray.  
-While it’s not an open-collaboration project, this document outlines structure and standards for future maintenance or internal extension.
+ChoopScoop is maintained as a personal portfolio project. Contributions, issues, and feedback are welcome.
 
----
+## Development setup
 
-## 🧱 Project Principles
+```bash
+git clone https://github.com/JerushaGray/ChoopScoop.git
+cd ChoopScoop
+pip install -e ".[dev]"
+playwright install chromium
+```
 
-- **Keep it simple.** No unnecessary abstractions or external dependencies.
-- **Optimize for clarity.** Readable, documented code > “clever” code.
-- **Version intentionally.** Every release (v2.1, v2.2, etc.) must have documented patch notes.
-- **Maintain async purity.** All async operations use Python’s native asyncio (no Twisted/Scrapy).
+## Project principles
 
----
+- **Keep it simple.** One clear way to do each thing.
+- **No external services for core detection.** All tag and technology patterns are built-in.
+- **Optimize for clarity.** Code should be readable without extensive comments.
+- **Version intentionally.** Each release should be a meaningful improvement.
 
-## 🧩 Development Guidelines
+## Running tests
 
-1. **Run linting and type checks**
-   ```bash
-   pylint choopscoop_site_auditor_v2.1.py
-   mypy choopscoop_site_auditor_v2.1.py
-   ```
+```bash
+pytest
+```
 
-2. **Keep dependencies lean**
-   - Prefer stdlib and Playwright.
-   - Avoid introducing frameworks that conflict with asyncio.
+## Code style
 
-3. **Documentation updates**
-   - Update relevant `.md` files under `/docs/` with each release.
-   - Maintain versioned quick-start and delivery summaries.
+- Follow existing patterns in the codebase.
+- Use type hints for function signatures.
+- Keep dependencies minimal.
 
-4. **Testing**
-   - Basic smoke tests for crawl and export functions.
-   - Validate JSON and CSV output for structure integrity.
+## Author
 
----
-
-## 🧠 Ownership
-
-Developed and maintained by **Jerusha Gray**  
-IdeoPraxis Collective LLC — DBA GetFunnelCaked
+Maintained by Jerusha Gray.
