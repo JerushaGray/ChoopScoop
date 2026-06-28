@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 from platform import system
 from typing import Dict, Optional
+from urllib.parse import urlparse
 
 from choopscoop import __version__
 from choopscoop.auditor import SiteAuditor
@@ -76,6 +77,9 @@ def load_config(config_file: Optional[str], cli_args: Dict) -> Dict:
         config['crawl']['concurrent_pages'] = cli_args['concurrent']
     if cli_args.get('output'):
         config['output']['prefix'] = cli_args['output']
+    else:
+        domain = urlparse(config['start_url']).netloc.replace(':', '_')
+        config['output']['prefix'] = f'site-audit-{domain}'
     if cli_args.get('format'):
         if cli_args['format'] == 'all':
             config['output']['formats'] = ['json', 'csv', 'html']
