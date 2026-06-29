@@ -132,7 +132,7 @@ resource constraints. The `CrawlState` class persists visited URLs, the remainin
 and collected page data to a JSON file. On restart, the auditor picks up where it left
 off instead of re-crawling.
 
-State files are domain-specific (`crawl_state_example_com.json`) so multiple audits can
+State files are domain-specific (`output/crawl_state_example_com.json`) so multiple audits can
 coexist. The `--no-resume` flag forces a fresh start.
 
 ### Evidence and confidence model (v3.1)

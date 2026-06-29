@@ -60,9 +60,9 @@ Every audit produces up to three export files:
 
 | Format | File | Contents |
 |--------|------|----------|
-| JSON | `site-audit.json` | Full crawl data: tags, technologies, dataLayer, performance, network requests |
-| CSV | `site-audit.csv` | One row per page with tag presence, load time, link counts |
-| HTML | `site-audit.html` | Interactive dashboard with tag/tech summaries, broken links, page details |
+| JSON | `output/site-audit.json` | Full crawl data: tags, technologies, dataLayer, performance, network requests |
+| CSV | `output/site-audit.csv` | One row per page with tag presence, load time, link counts |
+| HTML | `output/site-audit.html` | Interactive dashboard with tag/tech summaries, broken links, page details |
 
 ## How it works
 
@@ -119,7 +119,7 @@ filters:
 
 output:
   formats: ["json", "csv", "html"]
-  prefix: "site-audit"
+  prefix: "output/site-audit"
 
 resume:
   enabled: true         # Resume interrupted crawls
