@@ -20,9 +20,13 @@ If no file is provided, look for the most recent `site-audit-*.json` in the work
 
 ## Instructions
 
-Read the JSON file at `$0` using the Read tool. Parse the structure and produce a report
-following the tier guidelines below. Use the data dictionary at `docs/DATA_DICTIONARY.md`
-for field definitions if needed.
+Read the JSON file at `$0` using the Read tool. If a companion findings report exists
+(same path with `-findings.json` suffix, e.g., `output/site-audit-example_com-findings.json`),
+read that too -- it contains the pre-built tag index, technology index, coverage profiles,
+GA4 summary, and auto-generated findings. Use the findings report as your primary data
+source for sections 2-5 and 7, and fall back to the raw JSON for anything not covered.
+
+Use the data dictionary at `docs/DATA_DICTIONARY.md` for field definitions if needed.
 
 ## Output
 

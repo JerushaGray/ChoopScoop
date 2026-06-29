@@ -313,6 +313,79 @@ unidentified bucket.
 
 ---
 
+## Findings Report Schema
+
+Exported as `{prefix}-findings.json` alongside the main JSON export.
+
+### Top-level keys
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `report_info` | `object` | Site, domain, generation timestamp, total pages, ChoopScoop version. |
+| `tag_index` | `dict[str, object]` | Per-tag detail keyed by tag name. See below. |
+| `technology_index` | `dict[str, object]` | Per-technology detail keyed by tech name. See below. |
+| `category_breakdown` | `dict[str, list[str]]` | Tag category -> list of tag names in that category. |
+| `ga4_summary` | `object` | Aggregated GA4 data across all pages. See below. |
+| `coverage_profiles` | `list[object]` | Distinct tag profiles grouped by page. See below. |
+| `third_party_summary` | `object` | Matched request count, unidentified host count and detail. |
+| `findings` | `list[object]` | Auto-generated findings sorted by severity. See below. |
+
+### tag_index entries
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `category` | `str` | Tag category from pattern definition. |
+| `page_count` | `int` | Number of pages where this tag was detected. |
+| `total_pages` | `int` | Total pages crawled. |
+| `coverage_pct` | `float` | Percentage of pages with this tag (0-100). |
+| `confidence` | `str` | Highest confidence level observed across all pages. |
+| `ids` | `list[str]` | All unique IDs extracted (container IDs, measurement IDs, etc.). |
+| `evidence_types` | `list[str]` | All unique evidence strings observed. |
+| `detection_methods` | `list[str]` | Distinct evidence prefixes (e.g., `html_pattern`, `request_host`). |
+| `absent_from` | `list[str]` | URLs where tag was not detected. Present only when coverage < 100%. |
+
+### technology_index entries
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `category` | `str` | Technology category. |
+| `page_count` | `int` | Number of pages where detected. |
+| `total_pages` | `int` | Total pages crawled. |
+| `coverage_pct` | `float` | Percentage of pages (0-100). |
+| `confidence` | `str` | Highest confidence level observed. |
+| `evidence_types` | `list[str]` | All unique evidence strings. |
+| `detection_note` | `str` | Reliability caveat. Present only if the pattern definition includes one. |
+
+### ga4_summary
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `measurement_ids` | `list[str]` | All unique GA4 measurement IDs from collect requests. |
+| `collect_events` | `dict[str, int]` | Event name -> total count from `/g/collect` requests. |
+| `datalayer_events` | `dict[str, int]` | Recognized GA4 event label -> total count from dataLayer. |
+| `total_datalayer_pushes` | `int` | Total dataLayer items across all pages. |
+| `gtag_config` | `list[object]` | Deduplicated gtag config/consent/set/js/get commands. |
+
+### coverage_profiles entries
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `tags` | `list[str]` | Sorted list of tag names in this profile. |
+| `tag_count` | `int` | Number of tags in the profile. |
+| `page_count` | `int` | Number of pages sharing this exact tag set. |
+| `pages` | `list[str]` | URLs (capped at 10, with "... and N more" overflow). |
+
+### findings entries
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `type` | `str` | Finding type. One of: `coverage_gap`, `dual_fire`, `multiple_measurement_ids`, `programmatic_ads`, `no_consent_management`, `unidentified_vendors`, `tag_profile_inconsistency`. |
+| `severity` | `str` | `high`, `medium`, or `low`. |
+| `tag` | `str` | Tag name(s) related to the finding, or `'none'`. |
+| `detail` | `str` | Human-readable description of the finding. |
+
+---
+
 ## Extended Patterns (Wappalyzer Adapter)
 
 When `--extended` is used, Wappalyzer entries are converted to the same schema

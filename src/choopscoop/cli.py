@@ -240,6 +240,8 @@ Examples:
         if 'html' in config['output']['formats']:
             auditor.export_html(f'{output_prefix}.html')
 
+        auditor.export_findings(f'{output_prefix}-findings.json')
+
         print("\n" + "=" * 80)
         print("Audit complete!")
         print("=" * 80)

@@ -1065,6 +1065,275 @@ class SiteAuditor:
 
         print(f"Exported CSV to {filename}")
 
+    def export_findings(self, filename: str):
+        """Export a structured findings report with tag index, tech index,
+        GA4 summary, coverage analysis, and auto-generated findings."""
+        if not self.page_data:
+            return
+
+        total_pages = len(self.page_data)
+        matched_requests, unidentified_hosts = self._classify_network_requests()
+
+        # --- Tag Index ---
+        tag_index = {}
+        for tag_name in sorted(self.stats['tags_found'].keys()):
+            pages_present = []
+            pages_absent = []
+            all_ids = set()
+            all_evidence = set()
+            confidence_values = set()
+
+            for page in self.page_data:
+                tag_data = page.get('tags', {}).get(tag_name, {})
+                if tag_data.get('found'):
+                    pages_present.append(page['url'])
+                    all_ids.update(tag_data.get('ids', []))
+                    all_evidence.update(tag_data.get('evidence', []))
+                    if 'confidence' in tag_data:
+                        confidence_values.add(tag_data['confidence'])
+                else:
+                    pages_absent.append(page['url'])
+
+            tag_config = TAG_PATTERNS.get(tag_name, {})
+            coverage_pct = round(len(pages_present) / total_pages * 100, 1)
+
+            entry = {
+                'category': tag_config.get('category', 'Unknown'),
+                'page_count': len(pages_present),
+                'total_pages': total_pages,
+                'coverage_pct': coverage_pct,
+                'confidence': max(confidence_values, key=lambda c: {'high': 3, 'medium': 2, 'low': 1}.get(c, 0)) if confidence_values else 'unknown',
+                'ids': sorted(all_ids),
+                'evidence_types': sorted(all_evidence),
+                'detection_methods': sorted(set(
+                    e.split(':')[0] for e in all_evidence
+                )),
+            }
+            if coverage_pct < 100:
+                entry['absent_from'] = pages_absent
+            tag_index[tag_name] = entry
+
+        # --- Technology Index ---
+        tech_index = {}
+        tech_pages = defaultdict(list)
+        tech_evidence = defaultdict(set)
+        tech_confidence = defaultdict(set)
+        tech_notes = {}
+
+        for page in self.page_data:
+            for tech in page.get('technologies', []):
+                name = tech.get('name', 'Unknown')
+                tech_pages[name].append(page['url'])
+                tech_evidence[name].update(tech.get('evidence', []))
+                if 'confidence' in tech:
+                    tech_confidence[name].add(tech['confidence'])
+                if 'detection_note' in tech:
+                    tech_notes[name] = tech['detection_note']
+
+        for name in sorted(tech_pages.keys()):
+            coverage_pct = round(len(tech_pages[name]) / total_pages * 100, 1)
+            conf_vals = tech_confidence[name]
+            entry = {
+                'category': next(
+                    (t.get('category', 'Unknown')
+                     for p in self.page_data
+                     for t in p.get('technologies', [])
+                     if t.get('name') == name),
+                    'Unknown'
+                ),
+                'page_count': len(tech_pages[name]),
+                'total_pages': total_pages,
+                'coverage_pct': coverage_pct,
+                'confidence': max(conf_vals, key=lambda c: {'high': 3, 'medium': 2, 'low': 1}.get(c, 0)) if conf_vals else 'unknown',
+                'evidence_types': sorted(tech_evidence[name]),
+            }
+            if name in tech_notes:
+                entry['detection_note'] = tech_notes[name]
+            tech_index[name] = entry
+
+        # --- Category Breakdown ---
+        tag_categories = defaultdict(list)
+        for tag_name, info in tag_index.items():
+            tag_categories[info['category']].append(tag_name)
+        category_breakdown = {
+            cat: sorted(tags) for cat, tags in sorted(tag_categories.items())
+        }
+
+        # --- GA4 Summary (aggregated across all pages) ---
+        all_measurement_ids = set()
+        ga4_event_totals = defaultdict(int)
+        datalayer_event_totals = defaultdict(int)
+        gtag_configs = []
+        total_datalayer_events = 0
+
+        for page in self.page_data:
+            # GA4 collect events
+            ga4 = page.get('ga4_collect_events', {})
+            all_measurement_ids.update(ga4.get('measurement_ids', []))
+            for event_name, count in ga4.get('events', {}).items():
+                ga4_event_totals[event_name] += count
+
+            # DataLayer events
+            dl = page.get('datalayer', {})
+            total_datalayer_events += dl.get('total_events', 0)
+            for label, count in dl.get('ga4_events', {}).items():
+                datalayer_event_totals[label] += count
+
+            # gtag configs (deduplicate by command+target)
+            for cfg in dl.get('gtag_config', []):
+                key = (cfg.get('command', ''), str(cfg.get('target', '')))
+                if not any(
+                    (c.get('command', ''), str(c.get('target', ''))) == key
+                    for c in gtag_configs
+                ):
+                    gtag_configs.append(cfg)
+
+        ga4_summary = {
+            'measurement_ids': sorted(all_measurement_ids),
+            'collect_events': dict(sorted(
+                ga4_event_totals.items(), key=lambda x: -x[1]
+            )),
+            'datalayer_events': dict(sorted(
+                datalayer_event_totals.items(), key=lambda x: -x[1]
+            )),
+            'total_datalayer_pushes': total_datalayer_events,
+            'gtag_config': gtag_configs,
+        }
+
+        # --- Coverage Analysis ---
+        # Group pages by their tag profile (frozenset of tag names)
+        profile_groups = defaultdict(list)
+        for page in self.page_data:
+            tag_set = frozenset(
+                k for k, v in page.get('tags', {}).items() if v.get('found')
+            )
+            profile_groups[tag_set].append(page['url'])
+
+        coverage_profiles = []
+        for tag_set, urls in sorted(
+            profile_groups.items(), key=lambda x: -len(x[1])
+        ):
+            coverage_profiles.append({
+                'tags': sorted(tag_set),
+                'tag_count': len(tag_set),
+                'page_count': len(urls),
+                'pages': urls if len(urls) <= 10 else urls[:10] + [f'... and {len(urls) - 10} more'],
+            })
+
+        # --- Auto-generated Findings ---
+        findings = []
+
+        # Coverage gaps
+        for tag_name, info in tag_index.items():
+            if 0 < info['coverage_pct'] < 100:
+                absent_count = total_pages - info['page_count']
+                findings.append({
+                    'type': 'coverage_gap',
+                    'severity': 'medium' if info['coverage_pct'] > 50 else 'high',
+                    'tag': tag_name,
+                    'detail': f"{tag_name} detected on {info['page_count']}/{total_pages} pages ({info['coverage_pct']}%). Missing from {absent_count} pages.",
+                })
+
+        # Dual-fire detection (UA + GA4)
+        if 'universal_analytics' in tag_index and 'google_analytics_4' in tag_index:
+            findings.append({
+                'type': 'dual_fire',
+                'severity': 'medium',
+                'tag': 'universal_analytics',
+                'detail': 'Universal Analytics and GA4 are both active. UA stopped processing data in July 2023. UA tags add network overhead without collecting usable data.',
+            })
+
+        # Multiple GA4 measurement IDs
+        if len(all_measurement_ids) > 1:
+            findings.append({
+                'type': 'multiple_measurement_ids',
+                'severity': 'medium',
+                'tag': 'google_analytics_4',
+                'detail': f"{len(all_measurement_ids)} GA4 measurement IDs detected: {', '.join(sorted(all_measurement_ids))}. Verify all are intentional and not staging/prod crossfire.",
+            })
+
+        # Programmatic ad vendors
+        ad_tags = [
+            name for name, info in tag_index.items()
+            if info['category'] == 'Programmatic-Advertising'
+        ]
+        if ad_tags:
+            findings.append({
+                'type': 'programmatic_ads',
+                'severity': 'low',
+                'tag': ', '.join(ad_tags),
+                'detail': f"{len(ad_tags)} programmatic advertising vendors detected ({', '.join(ad_tags)}). These perform ID syncing and audience data sharing with third-party exchanges.",
+            })
+
+        # No consent management
+        consent_tags = [
+            name for name, info in tag_index.items()
+            if info['category'] == 'Consent Management'
+        ]
+        ad_and_tracking_tags = [
+            name for name, info in tag_index.items()
+            if info['category'] in ('Advertising', 'Programmatic-Advertising', 'Analytics', 'Heatmaps', 'Session Recording', 'Retargeting')
+        ]
+        if not consent_tags and ad_and_tracking_tags:
+            findings.append({
+                'type': 'no_consent_management',
+                'severity': 'high',
+                'tag': 'none',
+                'detail': f"No consent management platform detected, but {len(ad_and_tracking_tags)} tracking/advertising tags are active. This may create compliance risk under GDPR/CCPA.",
+            })
+
+        # Unidentified vendors
+        if unidentified_hosts:
+            findings.append({
+                'type': 'unidentified_vendors',
+                'severity': 'medium',
+                'tag': 'none',
+                'detail': f"{len(unidentified_hosts)} unidentified third-party hosts receiving requests. Top: {', '.join(list(unidentified_hosts.keys())[:5])}.",
+            })
+
+        # Tag profile inconsistency
+        if len(coverage_profiles) > 1:
+            dominant = coverage_profiles[0]
+            outlier_count = total_pages - dominant['page_count']
+            if outlier_count > 0:
+                findings.append({
+                    'type': 'tag_profile_inconsistency',
+                    'severity': 'low',
+                    'tag': 'none',
+                    'detail': f"{len(coverage_profiles)} distinct tag profiles detected. {dominant['page_count']}/{total_pages} pages share the dominant profile ({dominant['tag_count']} tags). {outlier_count} pages have a different tag stack, suggesting template-level variation.",
+                })
+
+        # Sort findings by severity
+        severity_order = {'high': 0, 'medium': 1, 'low': 2}
+        findings.sort(key=lambda f: severity_order.get(f['severity'], 3))
+
+        # --- Assemble Output ---
+        output = {
+            'report_info': {
+                'site': self.start_url,
+                'domain': self.base_domain,
+                'generated_at': datetime.now().isoformat(),
+                'total_pages': total_pages,
+                'choopscoop_version': '3.2.0',
+            },
+            'tag_index': tag_index,
+            'technology_index': tech_index,
+            'category_breakdown': category_breakdown,
+            'ga4_summary': ga4_summary,
+            'coverage_profiles': coverage_profiles,
+            'third_party_summary': {
+                'matched_request_count': len(matched_requests),
+                'unidentified_host_count': len(unidentified_hosts),
+                'unidentified_hosts': unidentified_hosts,
+            },
+            'findings': findings,
+        }
+
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(output, f, indent=2, ensure_ascii=False, default=str)
+
+        print(f"Exported findings report to {filename}")
+
     def export_html(self, filename: str):
         """Export interactive HTML report."""
         tag_summary = defaultdict(int)
