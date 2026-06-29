@@ -26,9 +26,10 @@ for field definitions if needed.
 
 ## Output
 
-Write the finished report to a markdown file named `audit-report-{domain}.md`, where
-`{domain}` is derived from the crawl's start_url (e.g., `audit-report-basemonkeys_com.md`).
-Use the Write tool to save the file. After writing, tell the user the output path.
+Write the finished report to `output/audit-report-{domain}.md`, where
+`{domain}` is derived from the crawl's start_url (e.g., `output/audit-report-basemonkeys_com.md`).
+Create the `output/` directory if it does not exist. Use the Write tool to save the file.
+After writing, tell the user the output path.
 
 **Do not hallucinate data. Every number, tag name, and finding must come from the JSON.**
 

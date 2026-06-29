@@ -108,7 +108,9 @@ class SiteAuditor:
         # Resume capability with domain-specific state files
         if config['resume']['enabled']:
             domain_safe = self.base_domain.replace('.', '_').replace(':', '_')
-            state_file = f"crawl_state_{domain_safe}.json"
+            output_dir = Path(config['output']['prefix']).parent
+            output_dir.mkdir(parents=True, exist_ok=True)
+            state_file = str(output_dir / f"crawl_state_{domain_safe}.json")
             self.state = CrawlState(state_file)
             self._load_previous_state()
         else:
@@ -808,8 +810,8 @@ class SiteAuditor:
 
             screenshot_path = None
             if self.config['performance']['capture_screenshots']:
-                screenshot_dir = Path("screenshots")
-                screenshot_dir.mkdir(exist_ok=True)
+                screenshot_dir = Path(self.output_prefix).parent / "screenshots"
+                screenshot_dir.mkdir(parents=True, exist_ok=True)
                 safe_name = urlparse(url).path.replace('/', '_') or 'index'
                 screenshot_path = str(screenshot_dir / f"{safe_name}.{self.config['performance']['screenshot_format']}")
                 await page.screenshot(path=screenshot_path)

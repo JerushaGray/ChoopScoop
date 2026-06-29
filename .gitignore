@@ -42,14 +42,8 @@ Thumbs.db
 # Logs
 *.log
 
-# Crawl state / output
-crawl_state_*.json
-site-audit*.json
-site-audit*.csv
-site-audit*.html
-*_partial.json
-screenshots/
-audit-report-*.md
+# Crawl output
+output/
 
 # Poetry
 poetry.lock

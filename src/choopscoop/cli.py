@@ -83,7 +83,11 @@ def load_config(config_file: Optional[str], cli_args: Dict) -> Dict:
         config['output']['prefix'] = cli_args['output']
     else:
         domain = urlparse(config['start_url']).netloc.replace(':', '_')
-        config['output']['prefix'] = f'site-audit-{domain}'
+        config['output']['prefix'] = f'output/site-audit-{domain}'
+
+    # Ensure the output directory exists
+    output_dir = Path(config['output']['prefix']).parent
+    output_dir.mkdir(parents=True, exist_ok=True)
     if cli_args.get('format'):
         if cli_args['format'] == 'all':
             config['output']['formats'] = ['json', 'csv', 'html']
