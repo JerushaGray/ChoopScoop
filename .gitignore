@@ -49,6 +49,7 @@ site-audit*.csv
 site-audit*.html
 *_partial.json
 screenshots/
+audit-report-*.md
 
 # Poetry
 poetry.lock
