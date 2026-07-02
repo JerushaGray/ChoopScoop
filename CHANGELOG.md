@@ -1,5 +1,58 @@
 # Changelog
 
+## v3.3.0
+
+Findings engine and structured analysis exports.  ChoopScoop now
+auto-generates a findings report with 17 issue types, a tag coverage
+matrix, and organizes all output into per-run subdirectories.
+
+### Added
+
+- **Findings report export** (`export_findings`).  Produces a structured
+  JSON analysis layer alongside the raw crawl data, containing:
+  - Tag index with per-tag coverage, confidence, extracted IDs, evidence
+    types, and absent-from page lists.
+  - Technology index with per-technology coverage and evidence.
+  - Category breakdown grouping tags by functional category.
+  - GA4 summary aggregating measurement IDs, collect events, dataLayer
+    events, and deduplicated gtag configuration.
+  - Coverage profiles grouping pages by their exact tag fingerprint to
+    surface template-level variation.
+  - Third-party vendor summary with matched request counts and
+    unidentified host inventory.
+  - 17 auto-generated finding types with severity ratings: coverage_gap,
+    dual_fire, multiple_measurement_ids, programmatic_ads,
+    no_consent_management, unidentified_vendors,
+    tag_profile_inconsistency, vendor_redundancy, missing_title,
+    missing_description, duplicate_titles, slow_pages,
+    tag_performance_correlation, silent_ga4, no_event_tracking,
+    multiple_gtm_containers, dead_end_pages.
+- **Tag coverage matrix export** (`export_tag_matrix`).  CSV matrix with
+  pages as rows (grouped when identical tag profiles) and tags as columns.
+  Includes a summary row with total page counts per tag.
+- **Per-run output directories.**  Crawl output now lands in
+  `output/run-{domain}/` instead of flat in `output/`.  All export paths,
+  state files, and partial flushes follow the new structure automatically.
+- **Audit-report Claude skill** (`.claude/skills/audit-report/`).  Reads
+  crawl JSON and findings JSON to produce a client-ready narrative report
+  in markdown at three tiers: factual summary, analytical, or advisory
+  with expanded findings and recommendations.
+- **Data dictionary** (`docs/DATA_DICTIONARY.md`).  Field definitions for
+  patterns, detection output, and export schema.
+- **Pipeline documentation** (`docs/PIPELINE.md`).  Full walkthrough of
+  the data pipeline from crawl to report.
+- 24 new tests covering findings generation: vendor redundancy, missing
+  metadata, performance findings, silent GA4, dataLayer pollution,
+  multiple GTM containers, dead-end pages, and severity sort order.
+  Total: 264.
+
+### Changed
+
+- Default output prefix changed from `output/site-audit-{domain}` to
+  `output/run-{domain}/site-audit-{domain}`.
+- Updated README with findings export, tag matrix, narrative report,
+  pipeline docs, and revised project structure.
+
 ## v3.2.0
 
 Extended technology detection via Wappalyzer adapter.  ChoopScoop can now

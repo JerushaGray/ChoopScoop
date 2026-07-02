@@ -56,23 +56,47 @@ python -m choopscoop https://example.com
 
 ## Output
 
-Every audit produces up to three export files:
+Each crawl creates a run directory at `output/run-{domain}/` containing:
 
-| Format | File | Contents |
-|--------|------|----------|
-| JSON | `output/site-audit.json` | Full crawl data: tags, technologies, dataLayer, performance, network requests |
-| CSV | `output/site-audit.csv` | One row per page with tag presence, load time, link counts |
-| HTML | `output/site-audit.html` | Interactive dashboard with tag/tech summaries, broken links, page details |
+| File | Contents |
+|------|----------|
+| `site-audit-{domain}.json` | Full crawl data: tags, technologies, dataLayer, GA4 collect events, performance, network requests |
+| `site-audit-{domain}-findings.json` | Computed analysis: tag index, technology index, coverage profiles, GA4 summary, and auto-generated findings with severity ratings |
+| `site-audit-{domain}-tag-matrix.csv` | Tag coverage matrix -- pages as rows, tags as columns, with group deduplication |
+| `site-audit-{domain}.csv` | One row per page with tag presence, load time, link counts |
+| `site-audit-{domain}.html` | Interactive dashboard with tag/tech summaries, broken links, page details |
+
+### Auto-generated findings
+
+The findings report detects 17 issue types automatically, including coverage gaps, UA/GA4 dual-fire, silent GA4 pages, missing consent management, vendor redundancy, duplicate titles, missing metadata, slow pages, dead-end pages, and programmatic ad vendor exposure. Each finding includes a type, severity (high/medium/low), and detail string.
+
+### Narrative report (optional)
+
+If you use [Claude Code](https://claude.ai/code), the bundled `/audit-report` skill reads the crawl JSON and produces a client-ready markdown report:
+
+```
+/audit-report output/run-example.com/site-audit-example_com.json --tier 3
+```
+
+| Tier | Content | Length |
+|------|---------|--------|
+| Tier 1 | Factual summary -- reformats data into tables | ~500 words |
+| Tier 2 | Analytical -- flags anomalies, identifies patterns (default) | ~1000-1500 words |
+| Tier 3 | Advisory -- expands each finding into Finding / Risk / Recommendation / Priority | ~2000 words |
+
+See [docs/PIPELINE.md](docs/PIPELINE.md) for a full walkthrough of the data pipeline.
 
 ## How it works
 
 ```
 URL --> Playwright (Chromium, headless)
          |
+         |--> Intercept all third-party network requests
          |--> Extract script tags, meta tags, response headers
          |--> Match against 77 tag patterns (regex + URL signatures + network hosts)
          |--> Match against 50+ technology patterns (HTML, meta, headers, network)
-         |--> Parse dataLayer for GA4/ecommerce events
+         |--> Parse dataLayer for GA4/ecommerce/gtag events
+         |--> Decode GA4 Measurement Protocol collect requests
          |--> Capture performance metrics (load time, FCP, DOM timings)
          |--> Extract internal links --> queue for next depth level
          |
@@ -82,7 +106,11 @@ URL --> Playwright (Chromium, headless)
          |--> Resume capability via state files
          |
          v
-    JSON / CSV / HTML reports
+    output/run-{domain}/
+         |--> Raw JSON + CSV + HTML exports
+         |--> Findings report (computed analysis + auto-findings)
+         |--> Tag coverage matrix
+         |--> [optional] Narrative report via /audit-report skill
 ```
 
 ## Project structure
@@ -96,8 +124,11 @@ src/choopscoop/
     patterns.py              Tag patterns, technology patterns, GA4 event map
     wappalyzer_adapter.py    Wappalyzer fingerprint conversion and caching
 config.yaml           Default configuration template
-tests/                Test suite (pytest)
+tests/                Test suite (264 tests, pytest)
 docs/
+    PIPELINE.md       Full pipeline walkthrough
+    DATA_DICTIONARY.md  Field definitions for patterns, detection output, and export schema
+    ARCHITECTURE.md   System architecture
     CONTRIBUTING.md   Development guidelines
     ROADMAP.md        Planned enhancements
 ```
@@ -148,6 +179,8 @@ This is opt-in because the Wappalyzer fingerprint data is [GPL-3.0](https://www.
 | Marketing tag detection (77 tools) | Yes | No | No | No |
 | Technology fingerprinting (50 curated, ~5000 extended) | Yes | Limited | No | No |
 | DataLayer/GA4 event parsing | Yes | No | No | No |
+| GA4 Measurement Protocol decoding | Yes | No | No | No |
+| Auto-generated findings (17 types) | Yes | No | No | No |
 | JavaScript-rendered pages | Yes (Playwright) | Yes | Yes | No |
 | Performance metrics | Yes | Yes | Yes | No |
 | Concurrent crawling | Yes (1-10 pages) | Yes | Single page | Yes |

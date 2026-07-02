@@ -56,6 +56,8 @@ meaningful to report.
 - Flag duplicate/overlapping tags (e.g., UA + GA4 dual-fire)
 - Flag tags in the Advertising or Programmatic-Advertising category -- these represent
   data sharing with third parties
+- Flag vendor redundancy (multiple tools in the same category, e.g., two heatmap tools)
+- Flag multiple GTM containers if detected
 
 #### 3. Technology Stack (all tiers)
 - Table: technology name, category, page count, confidence
@@ -75,6 +77,8 @@ meaningful to report.
 - Flag high custom event counts (may indicate misconfiguration)
 - Compare dataLayer events vs collect request events (intent vs reality)
 - Flag conversion events and confirm they carry expected parameters
+- Flag silent GA4 pages (tag present but no collect requests fired)
+- Flag no event tracking (dataLayer active but zero named GA4 events -- no conversion measurement)
 
 #### 5. Third-Party Vendor Inventory (all tiers)
 - Matched request count
@@ -91,15 +95,24 @@ meaningful to report.
 
 **Tier 2+ additions:**
 - Correlate tag count with load time (do pages with more tags load slower?)
+- Flag slow pages (>1.5x average load time)
 - Flag pages missing critical metadata (title, description, canonical)
+- Flag duplicate page titles
+- Flag dead-end pages (1 or fewer internal links)
 - Note crawl depth distribution
 
 #### 7. Findings & Recommendations (tier 3 only)
-- Numbered list of findings, each with:
+- Pull all auto-generated findings from the findings report and expand each into:
   - **Finding**: what was observed
   - **Risk**: why it matters (privacy, performance, data quality, compliance)
   - **Recommendation**: specific action to take
   - **Priority**: High / Medium / Low
+- Finding types to expect: `coverage_gap`, `dual_fire`, `multiple_measurement_ids`,
+  `programmatic_ads`, `no_consent_management`, `unidentified_vendors`,
+  `tag_profile_inconsistency`, `vendor_redundancy`, `missing_title`,
+  `missing_description`, `duplicate_titles`, `slow_pages`,
+  `tag_performance_correlation`, `silent_ga4`, `no_event_tracking`,
+  `multiple_gtm_containers`, `dead_end_pages`
 - Sort by priority descending
 
 ### Formatting Rules

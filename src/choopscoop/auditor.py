@@ -1303,6 +1303,167 @@ class SiteAuditor:
                     'detail': f"{len(coverage_profiles)} distinct tag profiles detected. {dominant['page_count']}/{total_pages} pages share the dominant profile ({dominant['tag_count']} tags). {outlier_count} pages have a different tag stack, suggesting template-level variation.",
                 })
 
+        # Vendor redundancy -- multiple tags in the same functional category
+        redundancy_categories = {
+            'Analytics': 'analytics',
+            'Heatmaps': 'heatmap/session recording',
+            'Session Recording': 'heatmap/session recording',
+            'Tag Management': 'tag management',
+            'A/B Testing': 'A/B testing',
+            'Consent Management': 'consent management',
+        }
+        category_tags = defaultdict(list)
+        for tag_name, info in tag_index.items():
+            mapped = redundancy_categories.get(info['category'])
+            if mapped:
+                category_tags[mapped].append(tag_name)
+        for purpose, tags in category_tags.items():
+            if len(tags) > 1:
+                findings.append({
+                    'type': 'vendor_redundancy',
+                    'severity': 'medium',
+                    'tag': ', '.join(tags),
+                    'detail': f"{len(tags)} {purpose} tools active: {', '.join(tags)}. Redundant tools add network overhead, may produce conflicting data, and increase the privacy surface.",
+                })
+
+        # Missing metadata
+        pages_no_title = []
+        pages_no_description = []
+        pages_no_canonical = []
+        duplicate_titles = defaultdict(list)
+        for page in self.page_data:
+            meta = page.get('metadata', {})
+            url = page['url']
+            title = (meta.get('title') or '').strip()
+            if not title:
+                pages_no_title.append(url)
+            else:
+                duplicate_titles[title].append(url)
+            if not (meta.get('description') or '').strip():
+                pages_no_description.append(url)
+            if not (meta.get('canonical') or '').strip():
+                pages_no_canonical.append(url)
+
+        if pages_no_title:
+            findings.append({
+                'type': 'missing_title',
+                'severity': 'medium',
+                'tag': 'none',
+                'detail': f"{len(pages_no_title)} page(s) missing a title tag: {', '.join(pages_no_title[:5])}" + (f" and {len(pages_no_title) - 5} more." if len(pages_no_title) > 5 else "."),
+            })
+        if pages_no_description:
+            findings.append({
+                'type': 'missing_description',
+                'severity': 'medium' if len(pages_no_description) > total_pages * 0.1 else 'low',
+                'tag': 'none',
+                'detail': f"{len(pages_no_description)} page(s) missing a meta description: {', '.join(pages_no_description[:5])}" + (f" and {len(pages_no_description) - 5} more." if len(pages_no_description) > 5 else "."),
+            })
+
+        dupe_titles = {t: urls for t, urls in duplicate_titles.items() if len(urls) > 1}
+        if dupe_titles:
+            total_dupes = sum(len(urls) for urls in dupe_titles.values())
+            worst_title = max(dupe_titles, key=lambda t: len(dupe_titles[t]))
+            findings.append({
+                'type': 'duplicate_titles',
+                'severity': 'medium' if total_dupes > total_pages * 0.2 else 'low',
+                'tag': 'none',
+                'detail': f"{total_dupes} pages share duplicate titles across {len(dupe_titles)} title(s). Most repeated: \"{worst_title}\" ({len(dupe_titles[worst_title])} pages).",
+            })
+
+        # Tag-to-performance correlation
+        load_times = []
+        tag_counts = []
+        for page in self.page_data:
+            lt = page.get('performance', {}).get('load_time', 0)
+            tc = sum(1 for v in page.get('tags', {}).values() if v.get('found'))
+            if lt > 0:
+                load_times.append(lt)
+                tag_counts.append(tc)
+
+        if load_times:
+            avg_load = sum(load_times) / len(load_times)
+
+            # Slow page detection (>1.5x average)
+            slow_pages = [
+                (page['url'], page.get('performance', {}).get('load_time', 0))
+                for page in self.page_data
+                if page.get('performance', {}).get('load_time', 0) > avg_load * 1.5
+            ]
+            if slow_pages:
+                slow_pages.sort(key=lambda x: -x[1])
+                findings.append({
+                    'type': 'slow_pages',
+                    'severity': 'medium',
+                    'tag': 'none',
+                    'detail': f"{len(slow_pages)} page(s) load more than 1.5x the average ({avg_load:.0f}ms). Slowest: {slow_pages[0][0]} ({slow_pages[0][1]:.0f}ms)." + (f" Next: {slow_pages[1][0]} ({slow_pages[1][1]:.0f}ms)." if len(slow_pages) > 1 else ""),
+                })
+
+            # Correlation: do pages with more tags load slower?
+            if len(set(tag_counts)) > 1 and len(load_times) >= 5:
+                # Group by tag count, compare averages
+                tc_groups = defaultdict(list)
+                for tc, lt in zip(tag_counts, load_times):
+                    tc_groups[tc].append(lt)
+                group_avgs = {tc: sum(lts) / len(lts) for tc, lts in tc_groups.items()}
+                min_tc = min(group_avgs)
+                max_tc = max(group_avgs)
+                if max_tc > min_tc and group_avgs[max_tc] > group_avgs[min_tc] * 1.2:
+                    findings.append({
+                        'type': 'tag_performance_correlation',
+                        'severity': 'low',
+                        'tag': 'none',
+                        'detail': f"Pages with {max_tc} tags average {group_avgs[max_tc]:.0f}ms load time vs {group_avgs[min_tc]:.0f}ms for pages with {min_tc} tags ({((group_avgs[max_tc] / group_avgs[min_tc]) - 1) * 100:.0f}% slower).",
+                    })
+
+        # Silent GA4 pages -- GA4 tag present but no collect request fired
+        if 'google_analytics_4' in tag_index:
+            silent_pages = []
+            for page in self.page_data:
+                ga4_tag = page.get('tags', {}).get('google_analytics_4', {})
+                ga4_collect = page.get('ga4_collect_events', {})
+                if ga4_tag.get('found') and not ga4_collect.get('events'):
+                    silent_pages.append(page['url'])
+            if silent_pages:
+                findings.append({
+                    'type': 'silent_ga4',
+                    'severity': 'high' if len(silent_pages) > total_pages * 0.5 else 'medium',
+                    'tag': 'google_analytics_4',
+                    'detail': f"GA4 tag present on {len(silent_pages)} page(s) but no Measurement Protocol collect requests fired. GA4 may be blocked by consent, ad blockers, or misconfiguration: {', '.join(silent_pages[:5])}" + (f" and {len(silent_pages) - 5} more." if len(silent_pages) > 5 else "."),
+                })
+
+        # DataLayer pollution -- high push count with no structured events
+        if ga4_summary['total_datalayer_pushes'] > 0 and not ga4_summary['datalayer_events']:
+            findings.append({
+                'type': 'no_event_tracking',
+                'severity': 'low',
+                'tag': 'none',
+                'detail': f"{ga4_summary['total_datalayer_pushes']} dataLayer pushes detected across all pages but 0 named GA4 events surfaced. No structured event tracking is in place -- conversion actions (form submits, sign-ups, purchases) are not being measured.",
+            })
+
+        # Multiple GTM containers
+        gtm_info = tag_index.get('google_tag_manager', {})
+        gtm_ids = gtm_info.get('ids', [])
+        if len(gtm_ids) > 1:
+            findings.append({
+                'type': 'multiple_gtm_containers',
+                'severity': 'medium',
+                'tag': 'google_tag_manager',
+                'detail': f"{len(gtm_ids)} GTM container IDs detected: {', '.join(gtm_ids)}. Multiple containers increase page weight, can cause race conditions, and make tag governance harder.",
+            })
+
+        # Dead-end pages -- very few internal links out
+        dead_end_pages = [
+            page['url'] for page in self.page_data
+            if page.get('internal_links_found', 0) <= 1 and page.get('status') == 200
+        ]
+        if dead_end_pages:
+            findings.append({
+                'type': 'dead_end_pages',
+                'severity': 'low',
+                'tag': 'none',
+                'detail': f"{len(dead_end_pages)} page(s) have 1 or fewer internal links, limiting discoverability: {', '.join(dead_end_pages[:5])}" + (f" and {len(dead_end_pages) - 5} more." if len(dead_end_pages) > 5 else "."),
+            })
+
         # Sort findings by severity
         severity_order = {'high': 0, 'medium': 1, 'low': 2}
         findings.sort(key=lambda f: severity_order.get(f['severity'], 3))
@@ -1314,7 +1475,7 @@ class SiteAuditor:
                 'domain': self.base_domain,
                 'generated_at': datetime.now().isoformat(),
                 'total_pages': total_pages,
-                'choopscoop_version': '3.2.0',
+                'choopscoop_version': '3.3.0',
             },
             'tag_index': tag_index,
             'technology_index': tech_index,
@@ -1333,6 +1494,75 @@ class SiteAuditor:
             json.dump(output, f, indent=2, ensure_ascii=False, default=str)
 
         print(f"Exported findings report to {filename}")
+
+    def export_tag_matrix(self, filename: str):
+        """Export a tag coverage matrix as CSV.
+
+        Rows are pages (or page groups when multiple pages share an identical
+        tag profile). Columns are every tag detected on at least one page.
+        Cells contain 'x' (present) or are empty (absent).
+        """
+        if not self.page_data:
+            return
+
+        # Collect all tags that were found on at least one page
+        all_tags = sorted({
+            tag_name
+            for page in self.page_data
+            for tag_name, tag_data in page.get('tags', {}).items()
+            if tag_data.get('found')
+        })
+
+        if not all_tags:
+            return
+
+        # Group pages by their exact tag fingerprint
+        from collections import OrderedDict
+        profile_groups = OrderedDict()
+        for page in self.page_data:
+            tag_set = frozenset(
+                k for k, v in page.get('tags', {}).items() if v.get('found')
+            )
+            if tag_set not in profile_groups:
+                profile_groups[tag_set] = []
+            profile_groups[tag_set].append(page['url'])
+
+        # Sort groups: largest first
+        sorted_profiles = sorted(
+            profile_groups.items(), key=lambda x: -len(x[1])
+        )
+
+        with open(filename, 'w', newline='', encoding='utf-8') as f:
+            fieldnames = ['page', 'pages_in_group'] + all_tags
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+
+            for tag_set, urls in sorted_profiles:
+                if len(urls) == 1:
+                    label = urls[0]
+                    count = 1
+                else:
+                    label = urls[0] + f' (+{len(urls) - 1} more)'
+                    count = len(urls)
+
+                row = {
+                    'page': label,
+                    'pages_in_group': count,
+                }
+                for tag_name in all_tags:
+                    row[tag_name] = 'x' if tag_name in tag_set else ''
+                writer.writerow(row)
+
+            # Summary row: total pages where each tag is present
+            summary = {'page': 'TOTAL', 'pages_in_group': len(self.page_data)}
+            for tag_name in all_tags:
+                summary[tag_name] = sum(
+                    len(urls) for tag_set, urls in sorted_profiles
+                    if tag_name in tag_set
+                )
+            writer.writerow(summary)
+
+        print(f"Exported tag coverage matrix to {filename}")
 
     def export_html(self, filename: str):
         """Export interactive HTML report."""

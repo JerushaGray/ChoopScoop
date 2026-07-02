@@ -165,6 +165,112 @@ class TestHtmlExport:
             os.unlink(path)
 
 
+class TestTagMatrixExport:
+    def _make_page(self, url, tags):
+        return {
+            'url': url, 'depth': 0, 'status': 200,
+            'metadata': {'title': 'Test'}, 'tags': tags,
+            'datalayer': {}, 'technologies': [], 'performance': {},
+            'network_requests': [], 'internal_links_found': 0,
+            'screenshot': None, 'crawled_at': '2025-01-01T00:00:00',
+        }
+
+    def test_matrix_creates_csv(self, auditor):
+        tags = {
+            'google_tag_manager': {'found': True, 'ids': ['GTM-ABC'], 'category': 'Tag Management'},
+            'facebook_pixel': {'found': False},
+        }
+        auditor.page_data = [self._make_page('https://example.com', tags)]
+
+        with tempfile.NamedTemporaryFile(suffix='.csv', delete=False) as f:
+            path = f.name
+        try:
+            auditor.export_tag_matrix(path)
+            with open(path, newline='') as f:
+                reader = csv.DictReader(f)
+                rows = list(reader)
+            # 1 page row + 1 summary row
+            assert len(rows) == 2
+            assert rows[0]['google_tag_manager'] == 'x'
+            assert 'facebook_pixel' not in reader.fieldnames
+            assert rows[1]['page'] == 'TOTAL'
+            assert rows[1]['google_tag_manager'] == '1'
+        finally:
+            os.unlink(path)
+
+    def test_matrix_groups_identical_profiles(self, auditor):
+        tags_full = {
+            'google_tag_manager': {'found': True, 'ids': [], 'category': 'Tag Management'},
+            'google_analytics_4': {'found': True, 'ids': [], 'category': 'Analytics'},
+        }
+        tags_partial = {
+            'google_tag_manager': {'found': True, 'ids': [], 'category': 'Tag Management'},
+            'google_analytics_4': {'found': False},
+        }
+        auditor.page_data = [
+            self._make_page('https://example.com/', tags_full),
+            self._make_page('https://example.com/about', tags_full),
+            self._make_page('https://example.com/blog', tags_partial),
+        ]
+
+        with tempfile.NamedTemporaryFile(suffix='.csv', delete=False) as f:
+            path = f.name
+        try:
+            auditor.export_tag_matrix(path)
+            with open(path, newline='') as f:
+                reader = csv.DictReader(f)
+                rows = list(reader)
+            # 2 profile rows + 1 summary
+            assert len(rows) == 3
+            # First row is the group of 2
+            assert rows[0]['pages_in_group'] == '2'
+            assert '+1 more' in rows[0]['page']
+            assert rows[0]['google_analytics_4'] == 'x'
+            # Second row is the single page missing GA4
+            assert rows[1]['pages_in_group'] == '1'
+            assert rows[1]['google_analytics_4'] == ''
+            assert rows[1]['google_tag_manager'] == 'x'
+        finally:
+            os.unlink(path)
+
+    def test_matrix_empty_data(self, auditor):
+        with tempfile.NamedTemporaryFile(suffix='.csv', delete=False) as f:
+            path = f.name
+        auditor.export_tag_matrix(path)
+        with open(path) as f:
+            assert f.read() == ''
+        os.unlink(path)
+
+    def test_matrix_summary_row_counts(self, auditor):
+        tags_a = {
+            'google_tag_manager': {'found': True, 'ids': [], 'category': 'Tag Management'},
+            'hotjar': {'found': True, 'ids': [], 'category': 'Heatmaps'},
+        }
+        tags_b = {
+            'google_tag_manager': {'found': True, 'ids': [], 'category': 'Tag Management'},
+            'hotjar': {'found': False},
+        }
+        auditor.page_data = [
+            self._make_page('https://example.com/', tags_a),
+            self._make_page('https://example.com/about', tags_a),
+            self._make_page('https://example.com/blog', tags_b),
+        ]
+
+        with tempfile.NamedTemporaryFile(suffix='.csv', delete=False) as f:
+            path = f.name
+        try:
+            auditor.export_tag_matrix(path)
+            with open(path, newline='') as f:
+                reader = csv.DictReader(f)
+                rows = list(reader)
+            summary = rows[-1]
+            assert summary['page'] == 'TOTAL'
+            assert summary['google_tag_manager'] == '3'
+            assert summary['hotjar'] == '2'
+        finally:
+            os.unlink(path)
+
+
 class TestNetworkRequestClassification:
     def test_owned_domain_excluded_from_unidentified(self, auditor):
         """Hosts on a vendor's owned_domains list are not unidentified."""

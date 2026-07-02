@@ -379,10 +379,32 @@ Exported as `{prefix}-findings.json` alongside the main JSON export.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `type` | `str` | Finding type. One of: `coverage_gap`, `dual_fire`, `multiple_measurement_ids`, `programmatic_ads`, `no_consent_management`, `unidentified_vendors`, `tag_profile_inconsistency`. |
+| `type` | `str` | Finding type. One of: `coverage_gap`, `dual_fire`, `multiple_measurement_ids`, `programmatic_ads`, `no_consent_management`, `unidentified_vendors`, `tag_profile_inconsistency`, `vendor_redundancy`, `missing_title`, `missing_description`, `duplicate_titles`, `slow_pages`, `tag_performance_correlation`, `silent_ga4`, `no_event_tracking`, `multiple_gtm_containers`, `dead_end_pages`. |
 | `severity` | `str` | `high`, `medium`, or `low`. |
 | `tag` | `str` | Tag name(s) related to the finding, or `'none'`. |
 | `detail` | `str` | Human-readable description of the finding. |
+
+### Finding Type Reference
+
+| Type | Default Severity | Trigger |
+|------|-----------------|---------|
+| `coverage_gap` | high (<50%) / medium (>50%) | Tag detected on some pages but not all. |
+| `dual_fire` | medium | Both Universal Analytics and GA4 are active. |
+| `multiple_measurement_ids` | medium | More than one GA4 measurement ID found in collect requests. |
+| `programmatic_ads` | low | One or more Programmatic-Advertising category tags detected. |
+| `no_consent_management` | high | No consent management tag but tracking/advertising tags are active. |
+| `unidentified_vendors` | medium | Third-party request hosts not matched to any known pattern. |
+| `tag_profile_inconsistency` | low | More than one distinct tag profile across pages. |
+| `vendor_redundancy` | medium | Multiple tags serving the same functional purpose (e.g., 2 heatmap tools). Grouped categories: Analytics, Heatmaps + Session Recording, Tag Management, A/B Testing, Consent Management. |
+| `missing_title` | medium | One or more pages have no title tag. |
+| `missing_description` | medium (>10% of pages) / low | One or more pages have no meta description. |
+| `duplicate_titles` | medium (>20% of pages) / low | Multiple pages share the same title tag value. |
+| `slow_pages` | medium | One or more pages load more than 1.5x the site average. |
+| `tag_performance_correlation` | low | Pages with more tags have measurably higher load times (>20% difference). |
+| `silent_ga4` | high (>50% of pages) / medium | GA4 tag present but no Measurement Protocol collect requests fired. |
+| `no_event_tracking` | low | DataLayer has pushes but zero named GA4 events -- no structured conversion tracking in place. |
+| `multiple_gtm_containers` | medium | More than one GTM container ID extracted. |
+| `dead_end_pages` | low | Pages with 1 or fewer internal outbound links. |
 
 ---
 

@@ -83,7 +83,7 @@ def load_config(config_file: Optional[str], cli_args: Dict) -> Dict:
         config['output']['prefix'] = cli_args['output']
     else:
         domain = urlparse(config['start_url']).netloc.replace(':', '_')
-        config['output']['prefix'] = f'output/site-audit-{domain}'
+        config['output']['prefix'] = f'output/run-{domain}/site-audit-{domain}'
 
     # Ensure the output directory exists
     output_dir = Path(config['output']['prefix']).parent
@@ -241,6 +241,7 @@ Examples:
             auditor.export_html(f'{output_prefix}.html')
 
         auditor.export_findings(f'{output_prefix}-findings.json')
+        auditor.export_tag_matrix(f'{output_prefix}-tag-matrix.csv')
 
         print("\n" + "=" * 80)
         print("Audit complete!")
