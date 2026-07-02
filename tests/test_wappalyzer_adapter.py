@@ -220,7 +220,7 @@ class TestCompiledPatternsWithAuditor:
 
     def test_compiled_patterns_match_html(self):
         from choopscoop.auditor import SiteAuditor
-        from tests.conftest import make_config
+        from conftest import make_config
 
         compiled = compile_patterns({
             "test_tech": {
@@ -239,7 +239,7 @@ class TestCompiledPatternsWithAuditor:
 
     def test_compiled_meta_patterns_match(self):
         from choopscoop.auditor import SiteAuditor
-        from tests.conftest import make_config
+        from conftest import make_config
 
         compiled = compile_patterns({
             "test_cms": {
@@ -258,7 +258,7 @@ class TestCompiledPatternsWithAuditor:
 
     def test_compiled_header_patterns_match(self):
         from choopscoop.auditor import SiteAuditor
-        from tests.conftest import make_config
+        from conftest import make_config
 
         compiled = compile_patterns({
             "test_server": {
